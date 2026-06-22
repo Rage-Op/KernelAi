@@ -78,6 +78,50 @@ final class FrameCodecTests: XCTestCase {
         XCTAssertEqual(data["count"]?.doubleValue, 2)
     }
 
+    // MARK: transcript (P4 additive — CC-02)
+
+    func testTranscriptFrameDecodesAndRoundTrips() throws {
+        // kernel line, no partial flag (the first-person prompt).
+        let kernelJSON = "{\"type\":\"transcript\",\"id\":\"t1\",\"role\":\"kernel\",\"text\":\"I need you to refactor the parser.\"}"
+        let kFrame = FrameCodec.decode(line: kernelJSON)
+        guard case let .transcript(kid, krole, ktext, kpartial) = kFrame else {
+            return XCTFail("expected .transcript(kernel), got \(String(describing: kFrame))")
+        }
+        XCTAssertEqual(kid, "t1")
+        XCTAssertEqual(krole, .kernel)
+        XCTAssertEqual(ktext, "I need you to refactor the parser.")
+        XCTAssertNil(kpartial, "an absent partial decodes to nil")
+        XCTAssertEqual(kFrame, FrameCodec.decode(line: try FrameCodec.encodeLine(kFrame!)), "kernel transcript round-trips")
+
+        // claude line, streaming (partial:true).
+        let partialJSON = "{\"type\":\"transcript\",\"id\":\"t2\",\"role\":\"claude\",\"text\":\"Reading the file…\",\"partial\":true}"
+        let pFrame = FrameCodec.decode(line: partialJSON)
+        guard case let .transcript(_, prole, _, ppartial) = pFrame else {
+            return XCTFail("expected .transcript(claude), got \(String(describing: pFrame))")
+        }
+        XCTAssertEqual(prole, .claude)
+        XCTAssertEqual(ppartial, true)
+        XCTAssertEqual(pFrame, FrameCodec.decode(line: try FrameCodec.encodeLine(pFrame!)), "partial transcript round-trips")
+
+        // claude line, finalized (partial:false).
+        let finalJSON = "{\"type\":\"transcript\",\"id\":\"t3\",\"role\":\"claude\",\"text\":\"Done.\",\"partial\":false}"
+        let fFrame = FrameCodec.decode(line: finalJSON)
+        guard case let .transcript(_, _, _, fpartial) = fFrame else {
+            return XCTFail("expected .transcript final, got \(String(describing: fFrame))")
+        }
+        XCTAssertEqual(fpartial, false)
+        XCTAssertEqual(fFrame, FrameCodec.decode(line: try FrameCodec.encodeLine(fFrame!)), "final transcript round-trips")
+    }
+
+    func testMalformedTranscriptIsTolerated() {
+        // out-of-enum role → nil (no crash).
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"transcript\",\"id\":\"x\",\"role\":\"martian\",\"text\":\"x\"}"))
+        // missing role → nil.
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"transcript\",\"id\":\"x\",\"text\":\"x\"}"))
+        // missing text → nil.
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"transcript\",\"id\":\"x\",\"role\":\"kernel\"}"))
+    }
+
     // MARK: malformed tolerated (T-03-13)
 
     func testMalformedLineDoesNotCrashDecoder() {

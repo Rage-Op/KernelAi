@@ -99,6 +99,8 @@ enum Frame: Codable, Equatable {
     case widgetData(widget: String, data: JSONValue)
     case uiState(state: SceneState)
     case error(id: String?, message: String)
+    /// P4 additive (CC-02): one line of the live Kernel↔Claude transcript. Mirrors TranscriptSchema.
+    case transcript(id: String, role: TranscriptRole, text: String, partial: Bool?)
 
     /// The Settings brain toggle enum (mirrors SettingsSchema.brain).
     enum Brain: String, Codable { case cloud, local }
@@ -106,9 +108,12 @@ enum Frame: Codable, Equatable {
     /// The cloud scene state (mirrors UiStateSchema.state).
     enum SceneState: String, Codable { case fullscreen, cornerPill, idle }
 
+    /// The transcript line author (mirrors TranscriptSchema.role).
+    enum TranscriptRole: String, Codable { case kernel, claude }
+
     private enum CodingKeys: String, CodingKey {
         case type, client, version, id, text, final, intent, payload, brain
-        case daemon, cues, onFinish, widget, data, state, message
+        case daemon, cues, onFinish, widget, data, state, message, role, partial
     }
 
     // MARK: Decode (narrow by `type`, exactly like the zod discriminated union)
@@ -161,6 +166,12 @@ enum Frame: Codable, Equatable {
             self = .error(
                 id: try c.decodeIfPresent(String.self, forKey: .id),
                 message: try c.decode(String.self, forKey: .message))
+        case "transcript":
+            self = .transcript(
+                id: try c.decode(String.self, forKey: .id),
+                role: try c.decode(TranscriptRole.self, forKey: .role),
+                text: try c.decode(String.self, forKey: .text),
+                partial: try c.decodeIfPresent(Bool.self, forKey: .partial))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: c,
@@ -221,6 +232,12 @@ enum Frame: Codable, Equatable {
             try c.encode("error", forKey: .type)
             try c.encodeIfPresent(id, forKey: .id)
             try c.encode(message, forKey: .message)
+        case .transcript(let id, let role, let text, let partial):
+            try c.encode("transcript", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(role, forKey: .role)
+            try c.encode(text, forKey: .text)
+            try c.encodeIfPresent(partial, forKey: .partial)
         }
     }
 }
