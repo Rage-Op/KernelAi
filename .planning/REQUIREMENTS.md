@@ -76,11 +76,11 @@
 
 ### Finance (FIN) — Phase 4 (spec P3)
 
-- [ ] **FIN-01**: Financial data is accessed only via a read-only aggregation API (Plaid-style OAuth); Pravin authorizes once in the bank's own flow and KERNEL receives read-only tokens.
-- [ ] **FIN-02**: KERNEL never types banking credentials/card numbers into any field (hard rule).
-- [ ] **FIN-03**: Balances and transactions live in a local, gitignored, encrypted store (SQLCipher, DB key in macOS Keychain) under `kernel-memory/finance/`.
-- [ ] **FIN-04**: Finance-leak prevention has all four layers verified passing before any backup job exists: broad gitignore, a pre-push hook scanning staged bytes, at-rest encryption, and a startup `git ls-files` assertion. *(P3 acceptance criterion — gates P4 backup.)*
-- [ ] **FIN-05**: Spending charts render with W/M/Y switchable timeframes, computed locally from aggregated transactions.
+- [x] **FIN-01**: Financial data is accessed only via a read-only aggregation API (Plaid-style OAuth); Pravin authorizes once in the bank's own flow and KERNEL receives read-only tokens.
+- [x] **FIN-02**: KERNEL never types banking credentials/card numbers into any field (hard rule).
+- [x] **FIN-03**: Balances and transactions live in a local, gitignored, encrypted store (SQLCipher, DB key in macOS Keychain) under `kernel-memory/finance/`.
+- [x] **FIN-04**: Finance-leak prevention has all four layers verified passing before any backup job exists: broad gitignore, a pre-push hook scanning staged bytes, at-rest encryption, and a startup `git ls-files` assertion. *(P3 acceptance criterion — gates P4 backup.)*
+- [x] **FIN-05**: Spending charts render with W/M/Y switchable timeframes, computed locally from aggregated transactions.
 
 ### Claude Code Bridge (CC) — Phase 4 (spec P3)
 
