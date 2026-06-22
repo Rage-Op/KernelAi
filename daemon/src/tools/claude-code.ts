@@ -10,14 +10,26 @@
  *     an injected `emit(frame)` seam (the IPC server supplies the real emitter; tests capture).
  *   - CC-04: appends a row to projects/registry.md on session start so KERNEL can cold-resume.
  *
- * GREEN/YELLOW-ONLY this phase (CC-03 / T-04-17): the run keeps the shipped read-only fence. A
- * Red-tier action a session proposes hits the shipped `gate.authorize` and is DENIED — the Red
- * re-submission shim is DEFERRED to Phase 5. This module does NOT build the shim.
+ * PHASE 5 — the Red RE-SUBMISSION SHIM (SAFE-05): the session keeps the shipped Green/Yellow
+ * read-only fence AND now carries `--disallowedTools` scoped Red deny rules (`Bash(rm *)`,
+ * `Bash(*install*)`, `Bash(*git push*)`, `Bash(sudo *)`, `Bash(rmdir *)`) — enforced even under a
+ * `--dangerously-skip-permissions` bypass (deny rules are non-overridable). When a session attempts
+ * one of these, `claude` records it in the final result event's `permission_denials[]`. Each denial
+ * is mapped (`mapDenialToToolCall`) to a KERNEL `ToolCall` stamped `origin:'self'` (it is KERNEL's
+ * OWN sub-contractor, NOT external content — so it is GATED by the breaker, NOT external-hard-blocked)
+ * and RE-ENTERS `registry.dispatch` (injected as `deps.dispatch`). dispatch routes a Red verdict to
+ * the live breaker from 05-01 (dry-run → 10s cancel → ceiling → audit → TOCTOU → execute). The shim
+ * NEVER executes the destructive op itself — it re-submits it to the SAME chokepoint so a mid-session
+ * `rm -rf`/purchase can never auto-run (RESEARCH Pitfall 6 / TOCTOU lives in the breaker it reaches).
+ *
+ * We deliberately do NOT rely on the `canUseTool`/`--permission-prompt-tool` callback (a documented
+ * gap in stream-json print mode); the `--disallowedTools` deny rules + `permission_denials` re-entry
+ * is the bypass-proof path.
  *
  * ABSENT-TOLERANT (T-04-20): a spawn ENOENT, a non-zero exit, or a malformed NDJSON line each
  * drop gracefully — a bad line is skipped, never thrown across the loop boundary (mirrors the
- * ClaudeCodeBrain discipline). The CLI runner is injectable via `__setRunnerForTest` so unit
- * tests NEVER spawn a real `claude`.
+ * ClaudeCodeBrain discipline). An absent/malformed `permission_denials` field is likewise tolerated.
+ * The CLI runner is injectable via `__setRunnerForTest` so unit tests NEVER spawn a real `claude`.
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -26,6 +38,9 @@ import path from 'node:path';
 import type { Frame, Transcript } from '../ipc/protocol.js';
 import { CLAUDE_CLI } from '../brain/ClaudeCodeBrain.js';
 import { logger } from '../memory/log.js';
+import type { ToolCall } from '../brain/BrainProvider.js';
+import type { ToolResult } from './Tool.js';
+import { dispatch as registryDispatch } from './registry.js';
 
 /** A task KERNEL hands the sub-contractor: a plain goal + the repo it operates in. */
 export interface ClaudeCodeTask {
@@ -49,12 +64,53 @@ export interface StreamResult {
 /** A runner spawns the CLI and invokes `onLine` per NDJSON line; resolves on close. */
 export type StreamRunner = (args: string[], onLine: OnLine) => Promise<StreamResult>;
 
-/** Dependencies injected into a session run (the emit seam + the registry target). */
+/** Dependencies injected into a session run (the emit seam + the registry target + re-entry). */
 export interface RunSessionDeps {
   /** Where transcript frames go (the IPC server's send, or a test capture). */
   emit: EmitFrame;
   /** The projects/registry.md path to append to (defaults to the memory repo). */
   registryPath?: string;
+  /**
+   * SAFE-05 re-entry seam: each `permission_denials` entry is re-submitted here so a Red action
+   * a CC session attempted RE-ENTERS the SAME gate→breaker (05-01) and never auto-runs. Defaults
+   * to the real `registry.dispatch`; tests inject a recording mock so no real claude/op is run.
+   */
+  dispatch?: (call: ToolCall) => Promise<ToolResult>;
+}
+
+/**
+ * SAFE-05 — the scoped Red deny rules carried in `--disallowedTools`. These are enforced even under
+ * a `--dangerously-skip-permissions` bypass. A match records a `permission_denials` entry in the
+ * final result event, which the shim re-submits to the gate→breaker. The Read-only fence already
+ * blocks most Red surface; these patterns close the destructive/install/escalation Bash holes.
+ */
+export const RED_DENY: readonly string[] = [
+  'Bash(rm *)',
+  'Bash(rmdir *)',
+  'Bash(*install*)',
+  'Bash(*git push*)',
+  'Bash(sudo *)',
+];
+
+/** One `permission_denials[]` entry as the stream-json final result event carries it. */
+export interface PermissionDenial {
+  tool?: string;
+  input?: { command?: string; [k: string]: unknown };
+}
+
+/**
+ * Map a CC `permission_denials` entry to a KERNEL ToolCall stamped `origin:'self'`. The denial is
+ * KERNEL's own sub-contractor's action (NOT external content), so it is GATED by the breaker rather
+ * than external-hard-blocked. The blocked command text is surfaced on `args.op` so the breaker's
+ * dry-run can preview exactly what would run; `args.command` carries the raw command for the audit.
+ */
+export function mapDenialToToolCall(denial: PermissionDenial): ToolCall {
+  const command = typeof denial.input?.command === 'string' ? denial.input.command : '';
+  return {
+    tool: 'shell',
+    args: { op: command || (denial.tool ?? 'unknown'), command, sourceTool: denial.tool ?? 'unknown' },
+    origin: 'self',
+  };
 }
 
 /** The active runner (test seam overrides it). Defaults to the real line-buffered spawn. */
@@ -86,8 +142,12 @@ export function authorFirstPersonPrompt(task: ClaudeCodeTask): string {
   return `I need you to work in ${task.repoPath}. ${task.goal}\n\nWork carefully and tell me what you're doing as you go.`;
 }
 
-/** Build the stream-json argv: print mode, NDJSON streaming with partials, Green/Yellow fenced. */
-function argvFor(prompt: string): string[] {
+/**
+ * Build the stream-json argv: print mode, NDJSON streaming with partials, the Green/Yellow read-only
+ * fence RETAINED, PLUS the SAFE-05 `--disallowedTools` Red deny rules (bypass-proof). Exported so the
+ * shim test can assert both the deny rules and the retained read-only fence are in the argv.
+ */
+export function argvFor(prompt: string): string[] {
   return [
     '-p',
     prompt,
@@ -99,6 +159,10 @@ function argvFor(prompt: string): string[] {
     'dontAsk', // deny anything outside the read-only set (Green/Yellow-only this phase)
     '--allowedTools',
     'Read',
+    // SAFE-05: scoped Red deny rules, enforced even under bypass. A match records a
+    // permission_denials entry the shim re-submits to the gate→breaker (origin:'self').
+    '--disallowedTools',
+    RED_DENY.join(','),
   ];
 }
 
@@ -132,6 +196,17 @@ interface StreamEvent {
   type?: string;
   result?: string;
   message?: { content?: Array<{ type?: string; text?: string }> };
+  /** SAFE-05: the final result event lists each tool call the deny rules blocked. */
+  permission_denials?: PermissionDenial[];
+}
+
+/**
+ * SAFE-05: extract the `permission_denials[]` from a final result event. An absent or malformed
+ * field yields an empty array — a bad shape is tolerated (shipped discipline), never thrown.
+ */
+function denialsFromEvent(evt: StreamEvent): PermissionDenial[] {
+  if (evt.type !== 'result') return [];
+  return Array.isArray(evt.permission_denials) ? evt.permission_denials : [];
 }
 
 /**
@@ -195,6 +270,10 @@ export async function runSession(task: ClaudeCodeTask, deps: RunSessionDeps): Pr
   const kernelFrame: Transcript = { type: 'transcript', id: nextId(), role: 'kernel', text: prompt };
   deps.emit(kernelFrame);
 
+  // SAFE-05: denials are collected synchronously as lines arrive, then re-submitted to the
+  // gate→breaker AFTER the run resolves (the async dispatch must not race the line parser).
+  const denials: PermissionDenial[] = [];
+
   const run = runner ?? realRunner;
   await run(argvFor(prompt), (line) => {
     // T-04-20: a malformed NDJSON line is dropped, never thrown across the boundary.
@@ -204,6 +283,9 @@ export async function runSession(task: ClaudeCodeTask, deps: RunSessionDeps): Pr
     } catch {
       return;
     }
+    // SAFE-05: harvest any permission_denials from the final result event (absent/malformed → none).
+    for (const d of denialsFromEvent(evt)) denials.push(d);
+
     const extracted = textFromEvent(evt);
     if (!extracted) return;
     const frame: Transcript = {
@@ -215,4 +297,24 @@ export async function runSession(task: ClaudeCodeTask, deps: RunSessionDeps): Pr
     };
     deps.emit(frame);
   });
+
+  // SAFE-05: each Red action the deny rules blocked RE-ENTERS the SAME gate→breaker (origin:'self')
+  // and is owner-gated — never auto-run. The shim itself executes NOTHING; it re-submits to dispatch.
+  const dispatch = deps.dispatch ?? registryDispatch;
+  for (const denial of denials) {
+    const reentry = mapDenialToToolCall(denial);
+    // Note the re-gated action in the transcript so the owner sees it in the pill (not silent).
+    deps.emit({
+      type: 'transcript',
+      id: nextId(),
+      role: 'kernel',
+      text: `Claude Code attempted a Red action (${reentry.args.op}); re-gating it through the breaker — not auto-running.`,
+    });
+    try {
+      await dispatch(reentry);
+    } catch (err) {
+      // A re-entry failure must never crash a session — log and continue (shipped discipline).
+      logger.warn({ tool: 'claude-code', err: String(err) }, 'claude-code: Red re-entry dispatch failed');
+    }
+  }
 }
