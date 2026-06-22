@@ -95,8 +95,8 @@
 - [x] **SAFE-02**: `/override` (typed or voice) unlocks autonomy: Green runs at full speed, Yellow proceeds + logs + briefly notifies.
 - [x] **SAFE-03**: Red tier is always gated even under `/override`: dry-run preview → 10-second cancel window → spend-ceiling check → audit log, with no race on the spend counter.
 - [x] **SAFE-04**: Hard non-overridable rules hold: no entering credentials/passwords/cards/SSN (escalate); no Red action whose instruction originated in external content (quarantine + escalate); a user-set daily spend ceiling forces escalation when exceeded.
-- [ ] **SAFE-05**: Red-tier gating applies inside Claude Code sessions too (re-submission shim re-enters the same breaker).
-- [ ] **SAFE-06**: The obstacle planner runs the ladder — try → replan → decompose → retry-with-backoff → escalate with a SPECIFIC recommendation ("X blocked by Y; I recommend Z. Approve?") — never a vague "I'm stuck"; only Red-tier gates skip the ladder and escalate immediately.
+- [x] **SAFE-05**: Red-tier gating applies inside Claude Code sessions too (re-submission shim re-enters the same breaker).
+- [x] **SAFE-06**: The obstacle planner runs the ladder — try → replan → decompose → retry-with-backoff → escalate with a SPECIFIC recommendation ("X blocked by Y; I recommend Z. Approve?") — never a vague "I'm stuck"; only Red-tier gates skip the ladder and escalate immediately.
 - [x] **SAFE-07**: `/override` and the Red tier are not enabled until Phase 5 (spec P4) is built and tested.
 
 ### Self-Maintenance (MAINT) — Phase 5 (spec P4) — GATED
