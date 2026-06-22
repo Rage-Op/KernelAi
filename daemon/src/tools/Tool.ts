@@ -35,6 +35,16 @@ export interface Tool {
   name: string;
   /** zod schema validating ToolCall.args before execute (ASVS V5; focus requirement). */
   schema: ZodType;
+  /**
+   * OPTIONAL pre-authorize hook (HANDS-05). Runs INSIDE `registry.dispatch` BEFORE `gate.authorize`
+   * so a tool can surface LIVE read-site signals the gate's credential fence needs to classify —
+   * e.g. the browser tool reads the target field's DOM `type`/`autocomplete`/label and mutates
+   * `call.args` so a `type="password"` field is DENIED before `.fill()` ever types. This does NOT
+   * bypass the chokepoint: it is a data-surfacing step that runs within dispatch, before the gate,
+   * and never executes the action. Tools whose signals already live on `args` (e.g. Peekaboo, whose
+   * AX signals are surfaced by the caller) omit this hook.
+   */
+  surfaceSignals?(args: Record<string, unknown>): Promise<void>;
   /** Run the action. NEVER called by anyone but registry.dispatch (after the gate). */
   execute(args: Record<string, unknown>): Promise<ToolResult>;
 }
