@@ -42,6 +42,8 @@
     <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory</string>
   </dict>
 
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/heartbeat.out.log</string>
   <key>StandardErrorPath</key>
   <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/heartbeat.err.log</string>
 </dict>
