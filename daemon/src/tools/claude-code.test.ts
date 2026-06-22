@@ -24,11 +24,16 @@ import {
   authorFirstPersonPrompt,
   runSession,
   appendToRegistry,
+  argvFor,
+  mapDenialToToolCall,
+  RED_DENY,
   __setRunnerForTest,
   type StreamRunner,
   type ClaudeCodeTask,
 } from './claude-code.js';
 import type { Frame } from '../ipc/protocol.js';
+import type { ToolCall } from '../brain/BrainProvider.js';
+import type { ToolResult } from './Tool.js';
 
 afterEach(() => {
   __setRunnerForTest(null);
@@ -167,4 +172,120 @@ test('appendToRegistry: seeds a header when the file is absent, then appends (CC
   const both = fs.readFileSync(registryPath, 'utf8');
   assert.match(both, /\/tmp\/proj2/, 'a second row appends below the first');
   assert.ok(both.indexOf('/tmp/proj') < both.indexOf('/tmp/proj2'), 'rows are append-only, in order');
+});
+
+// --- SAFE-05: Red re-submission shim — disallowedTools deny rules + permission_denials re-entry ---
+
+test('SAFE-05: argvFor carries the --disallowedTools Red deny rules AND retains the Green/Yellow read-only fence', () => {
+  const argv = argvFor('do the thing');
+
+  // The confirmed deny-rules flag (claude --help: --disallowedTools, --disallowed-tools <tools...>).
+  assert.ok(argv.includes('--disallowedTools'), 'the disallowedTools deny-rules flag is present in the argv');
+
+  // The deny rules are carried as the flag's value (one comma-joined argument).
+  const flagIdx = argv.indexOf('--disallowedTools');
+  const denyArg = argv[flagIdx + 1];
+  assert.equal(typeof denyArg, 'string', 'the deny-rules value follows the flag');
+  for (const rule of RED_DENY) {
+    assert.ok(denyArg.includes(rule), `the deny argument carries the Red rule "${rule}"`);
+  }
+  // Specifically the load-bearing destructive/install/escalation patterns.
+  assert.ok(RED_DENY.some((r) => /rm /.test(r)), 'RED_DENY blocks rm');
+  assert.ok(RED_DENY.some((r) => /install/.test(r)), 'RED_DENY blocks installs');
+  assert.ok(RED_DENY.some((r) => /git push/.test(r)), 'RED_DENY blocks git push');
+  assert.ok(RED_DENY.some((r) => /sudo /.test(r)), 'RED_DENY blocks sudo');
+
+  // The shipped Green/Yellow read-only fence is RETAINED alongside the new deny rules.
+  assert.ok(argv.includes('--permission-mode') && argv.includes('dontAsk'), 'read-only permission-mode fence retained');
+  assert.ok(argv.includes('--allowedTools') && argv.includes('Read'), 'allowedTools=Read fence retained');
+  assert.ok(argv.includes('--bare'), 'the deterministic --bare fence retained');
+});
+
+test('SAFE-05: mapDenialToToolCall builds a {tool, args:{op,...}, origin:"self"} ToolCall from a permission_denial', () => {
+  const call = mapDenialToToolCall({ tool: 'Bash', input: { command: 'rm -rf /tmp/x' } });
+  // It is KERNEL's own sub-contractor's action → origin:'self' (NOT external, so NOT hard-blocked).
+  assert.equal(call.origin, 'self', 'a re-entered CC denial is origin:self (NOT external)');
+  // It maps to a dispatchable ToolCall shape with the op surfaced in args (what the breaker previews).
+  assert.equal(typeof call.tool, 'string', 'maps to a ToolCall tool name');
+  assert.ok(call.args && typeof call.args === 'object', 'carries args');
+  assert.match(String(call.args.op ?? ''), /rm/i, 'the op text carries the destructive command');
+});
+
+test('SAFE-05: a permission_denials result event RE-ENTERS the injected dispatch once per denial (origin:self), never auto-runs', async () => {
+  // A mocked stream-json final result event carrying two Red denials (a destructive rm + a purchase).
+  const mock: StreamRunner = async (_args, onLine) => {
+    onLine(
+      JSON.stringify({
+        type: 'result',
+        result: 'I tried two privileged actions but was denied.',
+        permission_denials: [
+          { tool: 'Bash', input: { command: 'rm -rf /tmp/x' } },
+          { tool: 'Bash', input: { command: 'npm install left-pad' } },
+        ],
+      }),
+    );
+    return { code: 0 };
+  };
+  __setRunnerForTest(mock);
+
+  // An injected dispatch seam stands in for registry.dispatch (which in 05-01 routes a Red verdict
+  // to the breaker). The shim itself NEVER executes the destructive op — it only re-enters dispatch.
+  const dispatched: ToolCall[] = [];
+  const dispatch = async (c: ToolCall): Promise<ToolResult> => {
+    dispatched.push(c);
+    return { ok: false, escalation: { reason: 'gated by the breaker' } };
+  };
+
+  const frames: Frame[] = [];
+  await runSession(
+    { goal: 'do something', repoPath: '/tmp/widget' },
+    { emit: (f) => frames.push(f), registryPath: tmpRegistry(), dispatch },
+  );
+
+  // RE-ENTRY: dispatch was called EXACTLY once per denial — the Red action re-enters the gate→breaker.
+  assert.equal(dispatched.length, 2, 'each permission_denial re-enters dispatch exactly once');
+
+  // Every re-entered call is origin:'self' (KERNEL's own sub-contractor) → GATED by the breaker,
+  // NOT external-hard-blocked.
+  assert.ok(dispatched.every((c) => c.origin === 'self'), 'every re-entered ToolCall is origin:self');
+
+  // The destructive op text is carried so the breaker can preview it; the shim itself never ran it.
+  assert.ok(
+    dispatched.some((c) => /rm/i.test(String(c.args.op ?? ''))),
+    'the rm -rf denial was re-entered for gating',
+  );
+  assert.ok(
+    dispatched.some((c) => /install/i.test(String(c.args.op ?? ''))),
+    'the install denial was re-entered for gating',
+  );
+
+  // A transcript line notes the re-gated action so the owner sees it in the pill.
+  assert.ok(
+    frames.some((f) => f.type === 'transcript' && /re-?gat|gated|breaker/i.test(f.text)),
+    'a transcript line notes the Red action was re-gated, not auto-run',
+  );
+});
+
+test('SAFE-05: an absent/malformed permission_denials field is tolerated (no dispatch, no throw)', async () => {
+  const mock: StreamRunner = async (_args, onLine) => {
+    // a final result with NO permission_denials, and a malformed prior line.
+    onLine('not json <<<');
+    onLine(JSON.stringify({ type: 'result', result: 'Done, nothing denied.' }));
+    return { code: 0 };
+  };
+  __setRunnerForTest(mock);
+
+  const dispatched: ToolCall[] = [];
+  const dispatch = async (c: ToolCall): Promise<ToolResult> => {
+    dispatched.push(c);
+    return { ok: true };
+  };
+
+  await assert.doesNotReject(async () => {
+    await runSession(
+      { goal: 'x', repoPath: '/tmp/x' },
+      { emit: () => {}, registryPath: tmpRegistry(), dispatch },
+    );
+  }, 'an absent/malformed permission_denials must not throw');
+  assert.equal(dispatched.length, 0, 'no denials → dispatch is never called');
 });
