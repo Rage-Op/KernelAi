@@ -86,7 +86,7 @@ Plans:
   5. The Claude Code bridge authors prompts in first person as Pravin, shows a live scrollable transparency corner-pill transcript Pravin can read/interject/pause, records every project to `projects/registry.md` for cold resume, and routes any Red-tier action up to the `gate.authorize()` chokepoint via an intercept shim — Claude Code runs Green/Yellow-only with no ambient money/irreversible rights until Phase 5 (CC-01, CC-02, CC-03, CC-04).
 **Plans**: 4 plans
 Plans:
-- [ ] 04-01-PLAN.md — Routine engine (wave 1): YAML load + zod validation + Workday/Weekend/Travel presets + ordered/enabled step runner producing ≤2-widget speak cues via assembleSpeak + 7B mail_triage + Face-side EventKit invitation reply (Yellow) + the four Phase-4 glass widgets (mail/accounts/spending/email-preview) wired into CloudWindow (ROUT-01..05)
+- [x] 04-01-PLAN.md — Routine engine (wave 1): YAML load + zod validation + Workday/Weekend/Travel presets + ordered/enabled step runner producing ≤2-widget speak cues via assembleSpeak + 7B mail_triage + Face-side EventKit invitation reply (Yellow) + the four Phase-4 glass widgets (mail/accounts/spending/email-preview) wired into CloudWindow (ROUT-01..05)
 - [ ] 04-02-PLAN.md — Email reply flow (wave 2, after 04-01): always-injected ~200-token voice profile + 2-3 few-shot via retrieveAndRerank + stakes routing (casual→7B / high-stakes→cloud) + preview-card payload + Yellow Peekaboo-Mail gated send/mark-read + EmailPreview Send-intent wiring (no auto-send; external To shown) (MAIL-01..05)
 - [ ] 04-03-PLAN.md — Finance (wave 1): read-only Plaid (mocked) + SQLCipher store keyed from the Keychain via the `security` CLI + W/M/Y aggregation + the 4-LAYER LEAK STACK proven (gitignore + deliberate-abort pre-push hook + at-rest encryption + startup ls-files assertion) — the hard phase gate before Phase 5 (FIN-01..05)
 - [ ] 04-04-PLAN.md — Claude Code bridge (wave 2, after 04-01): first-person prompts + stream-json transcript over a NEW additive `transcript` IPC arm (byte-exact Swift mirror) + scrollable cornerPill transcript w/ pause + projects/registry.md append + Red-from-CC denied (re-submission shim deferred to Phase 5) (CC-01..04)
@@ -117,5 +117,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (Phase 5 GATED — re
 | 1. Skeleton (spec P0) | 3/3 | Complete   | 2026-06-22 |
 | 2. Hands (spec P1) | 3/3 | Complete   | 2026-06-22 |
 | 3. Brain + Voice + the Cloud (spec P2) | 4/4 | Complete   | 2026-06-22 |
-| 4. Routines + Claude Code + Finance (spec P3) | 0/4 | Not started | - |
+| 4. Routines + Claude Code + Finance (spec P3) | 1/4 | In Progress|  |
 | 5. Safety + Self-Maintenance (spec P4) [GATED] | 0/TBD | Gated — owner approval required | - |

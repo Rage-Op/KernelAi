@@ -60,11 +60,11 @@
 
 ### Routines / Morning Brief (ROUT) — Phase 4 (spec P3)
 
-- [ ] **ROUT-01**: The morning brief is a config file (`routines/morning-brief.yaml`), not hardcoded; each step is a module with `enabled`, `order`, `params`, `tier`.
-- [ ] **ROUT-02**: Presets Workday / Weekend / Travel are supported and switchable.
-- [ ] **ROUT-03**: The brief runs its steps (greeting, weather, calendar, invitations, mail triage, unread announce, email reply, balances, spending) one or two at a time, choreographed to narration via the Stage controller — never a static grid.
-- [ ] **ROUT-04**: Mail triage uses the local 7B to tag messages (log / reply / open / archive).
-- [ ] **ROUT-05**: Calendar reads via EventKit; invitations that accept/propose write a reply (Yellow tier).
+- [x] **ROUT-01**: The morning brief is a config file (`routines/morning-brief.yaml`), not hardcoded; each step is a module with `enabled`, `order`, `params`, `tier`.
+- [x] **ROUT-02**: Presets Workday / Weekend / Travel are supported and switchable.
+- [x] **ROUT-03**: The brief runs its steps (greeting, weather, calendar, invitations, mail triage, unread announce, email reply, balances, spending) one or two at a time, choreographed to narration via the Stage controller — never a static grid.
+- [x] **ROUT-04**: Mail triage uses the local 7B to tag messages (log / reply / open / archive).
+- [x] **ROUT-05**: Calendar reads via EventKit; invitations that accept/propose write a reply (Yellow tier).
 
 ### Email Reply Flow (MAIL) — Phase 4 (spec P3)
 
