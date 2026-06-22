@@ -122,6 +122,53 @@ final class FrameCodecTests: XCTestCase {
         XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"transcript\",\"id\":\"x\",\"role\":\"kernel\"}"))
     }
 
+    // MARK: breaker.preview / breaker.cancel (P5 additive — SAFE-03)
+
+    func testBreakerPreviewFrameDecodesAndRoundTrips() throws {
+        // a financial Red action — estimatedSpend shown to the owner, tier always red.
+        let json = "{\"type\":\"breaker.preview\",\"id\":\"bp-1\",\"summary\":\"Red action: shop (purchase) — estimated spend 40 — 10s to cancel.\",\"estimatedSpend\":40,\"tier\":\"red\"}"
+        let frame = FrameCodec.decode(line: json)
+        guard case let .breakerPreview(id, summary, estimatedSpend, tier) = frame else {
+            return XCTFail("expected .breakerPreview, got \(String(describing: frame))")
+        }
+        XCTAssertEqual(id, "bp-1")
+        XCTAssertEqual(tier, .red)
+        XCTAssertEqual(estimatedSpend, 40)
+        XCTAssertTrue(summary.contains("Red action"))
+        // Re-encode → decode again must be structurally identical.
+        let line = try FrameCodec.encodeLine(frame!)
+        XCTAssertEqual(frame, FrameCodec.decode(line: line), "breaker.preview must round-trip")
+
+        // a non-financial Red action — estimatedSpend 0.
+        let rmJSON = "{\"type\":\"breaker.preview\",\"id\":\"bp-2\",\"summary\":\"Red action: fs (rm -rf) — 10s to cancel.\",\"estimatedSpend\":0,\"tier\":\"red\"}"
+        let rm = FrameCodec.decode(line: rmJSON)
+        guard case let .breakerPreview(_, _, rmSpend, _) = rm else {
+            return XCTFail("expected .breakerPreview (rm), got \(String(describing: rm))")
+        }
+        XCTAssertEqual(rmSpend, 0, "a non-financial Red op has estimatedSpend 0")
+        XCTAssertEqual(rm, FrameCodec.decode(line: try FrameCodec.encodeLine(rm!)))
+    }
+
+    func testBreakerCancelFrameDecodesAndRoundTrips() throws {
+        let json = "{\"type\":\"breaker.cancel\",\"id\":\"bp-1\"}"
+        let frame = FrameCodec.decode(line: json)
+        guard case let .breakerCancel(id) = frame else {
+            return XCTFail("expected .breakerCancel, got \(String(describing: frame))")
+        }
+        XCTAssertEqual(id, "bp-1", "the cancel correlates to the preview id")
+        let line = try FrameCodec.encodeLine(frame!)
+        XCTAssertEqual(frame, FrameCodec.decode(line: line), "breaker.cancel must round-trip")
+    }
+
+    func testMalformedBreakerPreviewIsTolerated() {
+        // out-of-enum tier → nil (no crash).
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"breaker.preview\",\"id\":\"x\",\"summary\":\"s\",\"estimatedSpend\":0,\"tier\":\"yellow\"}"))
+        // missing summary → nil.
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"breaker.preview\",\"id\":\"x\",\"estimatedSpend\":0,\"tier\":\"red\"}"))
+        // missing estimatedSpend → nil.
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"breaker.preview\",\"id\":\"x\",\"summary\":\"s\",\"tier\":\"red\"}"))
+    }
+
     // MARK: malformed tolerated (T-03-13)
 
     func testMalformedLineDoesNotCrashDecoder() {

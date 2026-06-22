@@ -95,11 +95,47 @@ final class AppCoordinator: ObservableObject {
             cloud.center = (state == .cornerPill) ? SIMD2<Float>(-0.6, 0.6) : .zero
         case .transcript(let id, let role, let text, let partial):
             appendTranscript(id: id, role: role, text: text, partial: partial ?? false)
+        case .breakerPreview(let id, let summary, let estimatedSpend, _):
+            // SAFE-03: a Red action entered the breaker. Surface the dry-run preview card with the
+            // 10s cancel window. The owner Cancel emits a breaker.cancel{id}; the window elapsing
+            // (or an audit/cancel resolution) clears it.
+            presentBreakerPreview(BreakerPreview(id: id, summary: summary, estimatedSpend: estimatedSpend))
         case .error(_, let message):
             log.error("daemon error: \(message, privacy: .public)")
         default:
-            break  // hello/ping/pong/utterance/ui.intent/settings are not inbound-handled here
+            break  // hello/ping/pong/utterance/ui.intent/settings/breaker.cancel are not inbound-handled here
         }
+    }
+
+    // MARK: Red breaker preview (SAFE-03) — the §8 human-in-the-loop 10s cancel window
+
+    /// The Red action currently awaiting the owner's cancel decision (nil when none is in flight).
+    /// The CloudWindow renders the BreakerPreviewCard while this is set.
+    @Published private(set) var activeBreakerPreview: BreakerPreview? = nil
+
+    /// Surface a breaker dry-run preview. A new preview replaces any prior one (the breaker runs
+    /// one gated action at a time, serialized by the daemon loop).
+    func presentBreakerPreview(_ preview: BreakerPreview) {
+        activeBreakerPreview = preview
+        cloud.pulse()   // boundary-burst — a Red gate is a moment worth flashing.
+    }
+
+    /// The owner tapped Cancel within the window: emit `breaker.cancel{id}` so the daemon aborts the
+    /// pending Red action, then clear the card. The Face NEVER decides the action — it only cancels.
+    func cancelBreakerPreview(_ preview: BreakerPreview) {
+        let frame = Frame.breakerCancel(id: preview.id)
+        if Self.isUnderXCTest {
+            log.info("under XCTest host — not sending breaker.cancel \(preview.id, privacy: .public)")
+        } else {
+            socket.send(frame)
+        }
+        if activeBreakerPreview?.id == preview.id { activeBreakerPreview = nil }
+    }
+
+    /// The window elapsed with no cancel — the locked SAFE-03 default is PROCEED (the daemon's
+    /// breaker proceeds after ceiling+audit). The card auto-dismisses; nothing is sent.
+    func breakerPreviewElapsed(_ preview: BreakerPreview) {
+        if activeBreakerPreview?.id == preview.id { activeBreakerPreview = nil }
     }
 
     // MARK: Claude Code transcript buffer (CC-02)

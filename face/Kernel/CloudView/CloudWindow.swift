@@ -21,8 +21,22 @@ struct CloudWindow: View {
             case .cornerPill:
                 cornerPill
             }
+
+            // SAFE-03: the Red-tier breaker preview overlays EVERY scene (incl. a live Claude Code
+            // cornerPill session) — the §8 human-in-the-loop 10s cancel window is safety-critical
+            // surfacing, never hidden behind the current scene. Centered glass card.
+            if let preview = coordinator.activeBreakerPreview {
+                BreakerPreviewCard(
+                    preview: preview,
+                    isPresented: true,
+                    onCancel: { coordinator.cancelBreakerPreview($0) },
+                    onElapsed: { coordinator.breakerPreviewElapsed($0) })
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .zIndex(1)
+            }
         }
         .animation(Motion.cloudState, value: coordinator.scene)   // spring migration, no snap
+        .animation(Motion.bloom, value: coordinator.activeBreakerPreview)
     }
 
     // MARK: Full-screen state (boot / speaking) — cloud owns the canvas, widgets bloom.

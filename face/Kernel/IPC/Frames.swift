@@ -91,6 +91,9 @@ enum Frame: Codable, Equatable {
     case ping(id: String)
     case uiIntent(id: String, intent: String, payload: JSONValue?)
     case settings(brain: Brain)
+    /// P5 additive (SAFE-03): the owner cancelled a Red action within the 10s window. Mirrors
+    /// BreakerCancelSchema. `id` correlates to the breaker.preview the daemon broadcast.
+    case breakerCancel(id: String)
     // daemon → Face
     case ready(daemon: String, version: String)
     case reply(id: String, text: String)
@@ -101,9 +104,16 @@ enum Frame: Codable, Equatable {
     case error(id: String?, message: String)
     /// P4 additive (CC-02): one line of the live Kernel↔Claude transcript. Mirrors TranscriptSchema.
     case transcript(id: String, role: TranscriptRole, text: String, partial: Bool?)
+    /// P5 additive (SAFE-03): the breaker's dry-run preview surfaced when a Red action enters the
+    /// 10s cancel window. Mirrors BreakerPreviewSchema. `estimatedSpend` is SHOWN to the owner but
+    /// NEVER written to the audit log (V7); `tier` is always `red`.
+    case breakerPreview(id: String, summary: String, estimatedSpend: Double, tier: BreakerTier)
 
     /// The Settings brain toggle enum (mirrors SettingsSchema.brain).
     enum Brain: String, Codable { case cloud, local }
+
+    /// The breaker preview tier (mirrors BreakerPreviewSchema.tier — always `red`).
+    enum BreakerTier: String, Codable { case red }
 
     /// The cloud scene state (mirrors UiStateSchema.state).
     enum SceneState: String, Codable { case fullscreen, cornerPill, idle }
@@ -114,6 +124,7 @@ enum Frame: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case type, client, version, id, text, final, intent, payload, brain
         case daemon, cues, onFinish, widget, data, state, message, role, partial
+        case summary, estimatedSpend, tier
     }
 
     // MARK: Decode (narrow by `type`, exactly like the zod discriminated union)
@@ -140,6 +151,14 @@ enum Frame: Codable, Equatable {
                 payload: try c.decodeIfPresent(JSONValue.self, forKey: .payload))
         case "settings":
             self = .settings(brain: try c.decode(Brain.self, forKey: .brain))
+        case "breaker.cancel":
+            self = .breakerCancel(id: try c.decode(String.self, forKey: .id))
+        case "breaker.preview":
+            self = .breakerPreview(
+                id: try c.decode(String.self, forKey: .id),
+                summary: try c.decode(String.self, forKey: .summary),
+                estimatedSpend: try c.decode(Double.self, forKey: .estimatedSpend),
+                tier: try c.decode(BreakerTier.self, forKey: .tier))
         case "ready":
             self = .ready(
                 daemon: try c.decode(String.self, forKey: .daemon),
@@ -204,6 +223,15 @@ enum Frame: Codable, Equatable {
         case .settings(let brain):
             try c.encode("settings", forKey: .type)
             try c.encode(brain, forKey: .brain)
+        case .breakerCancel(let id):
+            try c.encode("breaker.cancel", forKey: .type)
+            try c.encode(id, forKey: .id)
+        case .breakerPreview(let id, let summary, let estimatedSpend, let tier):
+            try c.encode("breaker.preview", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(summary, forKey: .summary)
+            try c.encode(estimatedSpend, forKey: .estimatedSpend)
+            try c.encode(tier, forKey: .tier)
         case .ready(let daemon, let version):
             try c.encode("ready", forKey: .type)
             try c.encode(daemon, forKey: .daemon)
