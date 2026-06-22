@@ -23,7 +23,7 @@
 - [x] **MEM-04**: Relevant memory is retrieved by keyword (no embeddings) and reranked by an authority×recency signal.
 - [x] **MEM-05**: Externally-sourced content (email/web) carries a `source:` provenance tag through the context layer and lands in a `working-memory/quarantine/` bucket; it is never auto-promoted to `knowledge/` or `IDENTITY.md`. *(P0 seam; promotion gate completes in P4.)*
 - [x] **MEM-06**: The `kernel-memory/finance/` path is gitignored and excluded from any backup.
-- [ ] **MEM-07**: A nightly consolidation job distills logs → reflections and promotes durable facts → knowledge; a cleanup job prunes stale working-memory/logs. *(Phase 5 / spec P4.)*
+- [x] **MEM-07**: A nightly consolidation job distills logs → reflections and promotes durable facts → knowledge; a cleanup job prunes stale working-memory/logs. *(Phase 5 / spec P4.)*
 
 ### Brain (BRAIN) — Phase 1 (interface + stub, spec P0), Phase 3 (impls, spec P2)
 
@@ -101,9 +101,9 @@
 
 ### Self-Maintenance (MAINT) — Phase 5 (spec P4) — GATED
 
-- [ ] **MAINT-01**: A nightly launchd job commits and pushes the memory repo to a private GitHub backup (never including `finance/`).
-- [ ] **MAINT-02**: KERNEL maintains `self/changelog.md` and `self/metrics.md`.
-- [ ] **MAINT-03**: The maintenance jobs (consolidation, cleanup, backup) run on schedule via launchd.
+- [x] **MAINT-01**: A nightly launchd job commits and pushes the memory repo to a private GitHub backup (never including `finance/`).
+- [x] **MAINT-02**: KERNEL maintains `self/changelog.md` and `self/metrics.md`.
+- [x] **MAINT-03**: The maintenance jobs (consolidation, cleanup, backup) run on schedule via launchd.
 
 ### Persona & Voice (PERS) — Phase 1 (IDENTITY, spec P0), refined through Phase 4 (spec P3)
 
@@ -145,7 +145,7 @@ GSD phases are 1-indexed; the spec (§16) is 0-indexed. The mapping is one GSD p
 |-------------|-------|--------|
 | CORE-01..05 | Phase 1 (spec P0) | Pending |
 | MEM-01..06 | Phase 1 (spec P0) | Pending |
-| MEM-07 | Phase 5 (spec P4; gated) | Pending |
+| MEM-07 | Phase 5 (spec P4; gated) | Complete |
 | BRAIN-01 | Phase 1 (spec P0) | Complete |
 | BRAIN-02..06 | Phase 3 (spec P2) | Pending |
 | PERS-01..03 | Phase 1 (spec P0; refined through Phase 4) | Pending |

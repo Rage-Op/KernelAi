@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-last_updated: "2026-06-22T17:29:27.276Z"
+last_updated: "2026-06-22T17:40:40.576Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 16
-  percent: 80
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -29,7 +29,7 @@ Plan: 3 of 3 in current phase
 Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [█████████░] 94%
 | Phase 04-routines-claude-code-finance P04 | 7 min | 3 tasks | 13 files |
 | Phase 05 P01 | 18 min | 3 tasks | 18 files |
 | Phase 05 P02 | 5 min | 2 tasks | 6 files |
+| Phase 05 P03 | 14 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Recent decisions affecting current work:
 - [Phase 04-routines-claude-code-finance]: email_reply only fills the email-preview widget; the Yellow send gate (ui.intent dispatch) lands in 04-02 — no auto-send path exists
 - [Phase 04-routines-claude-code-finance]: Claude Code prompts authored first-person as Pravin; transcript streams over a NEW additive FrameSchema arm (Pattern 1, never mutate existing arms) — CC-01/CC-02; the additive-arm guard asserts no removed lines so the frozen contract stays compatible with shipped Face
 - [Phase 04-routines-claude-code-finance]: A Red-tier Claude Code action is DENIED by the shipped gate; re-submission shim DEFERRED to Phase 5 — CC-03/T-04-17; gate.ts unchanged (Red=deny already holds regardless of originator) — Phase 4 is Green/Yellow only
+- [Phase 05]: Consolidation promotes ONLY source:user/self facts; external is summarized-for-recall (unverified, from <origin>) but NEVER promoted, and IDENTITY.md is never auto-edited — Pitfall 4 — the no-promote source filter + a final promoteFact guard make an external fact unrepresentable in knowledge/; proven byte-identical over an external-only run
+- [Phase 05]: Backup stages an explicit git add allowlist (never -A/-f/.) and refuses to push without BOTH a remote and the pre-push hook — Pitfall 3/5 finance leak — an argv guard makes a greedy add unrepresentable; assertFinanceNotTracked runs before push; fail-loud beats a silent no-op that could leak
 
 ### Pending Todos
 
@@ -124,6 +127,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T17:29:27.269Z
+Last session: 2026-06-22T17:40:27.738Z
 Stopped at: Completed 05-02-PLAN.md
 Resume file: None
