@@ -47,16 +47,16 @@
 - [x] **VOICE-01**: whisper.cpp runs as a subprocess (Core ML/ANE build); mic audio is piped in and a transcript is read out (STT).
 - [x] **VOICE-02**: Pravin can speak to KERNEL and it reasons and responds.
 - [x] **VOICE-03**: TTS uses AVSpeechSynthesizer; the `willSpeakRangeOfSpeechString` delegate emits word/segment boundaries that drive on-screen choreography.
-- [ ] **VOICE-04**: The Stage controller supports both word-level (callback-driven) and sentence-level (time-based) pacing so choreography survives flaky boundary callbacks.
+- [x] **VOICE-04**: The Stage controller supports both word-level (callback-driven) and sentence-level (time-based) pacing so choreography survives flaky boundary callbacks.
 
 ### The Cloud — Face / UI (CLOUD) — Phase 3 (spec P2)
 
 - [x] **CLOUD-01**: A native SwiftUI menubar app launches at login (MenuBarExtra + SMAppService) and connects to the daemon over the localhost socket.
-- [ ] **CLOUD-02**: A deep spatial-black canvas renders a real GPU particle cloud (Metal compute-shader particles) that drifts when idle.
-- [ ] **CLOUD-03**: While speaking, mic RMS amplitude pushes particles outward and brightens them; quiet pulls them calm — color lives between indigo `#7C8CFF` and cyan `#42E8E0`.
+- [x] **CLOUD-02**: A deep spatial-black canvas renders a real GPU particle cloud (Metal compute-shader particles) that drifts when idle.
+- [x] **CLOUD-03**: While speaking, mic RMS amplitude pushes particles outward and brightens them; quiet pulls them calm — color lives between indigo `#7C8CFF` and cyan `#42E8E0`.
 - [x] **CLOUD-04**: A Stage controller, driven by the routine engine and TTS boundaries, makes a frosted-glass widget bloom forward (0.96→1, opacity in, forward-blur clears) while a topic is spoken, then disperses it back into the cloud — one or two widgets in focus at a time.
-- [ ] **CLOUD-05**: The cloud has two states: full-screen when speaking/at boot, and a shrunk top-left corner pill during a Claude Code session.
-- [ ] **CLOUD-06**: The design language holds — shadcn-grade dark restraint, hairline borders, SF Pro, tabular numerals for money, spring motion (nothing snaps), one accent only.
+- [x] **CLOUD-05**: The cloud has two states: full-screen when speaking/at boot, and a shrunk top-left corner pill during a Claude Code session.
+- [x] **CLOUD-06**: The design language holds — shadcn-grade dark restraint, hairline borders, SF Pro, tabular numerals for money, spring motion (nothing snaps), one accent only.
 
 ### Routines / Morning Brief (ROUT) — Phase 4 (spec P3)
 

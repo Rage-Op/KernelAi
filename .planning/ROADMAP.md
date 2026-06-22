@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Skeleton** - Persistent TypeScript daemon, markdown memory injection, BrainProvider swap-seam, launchd heartbeat, provenance/quarantine seam (spec Phase 0) (completed 2026-06-22)
 - [x] **Phase 2: Hands** - Peekaboo MCP + Playwright headful browser + tool router behind a single `gate.authorize` chokepoint with a thin tier-classifier (spec Phase 1) (completed 2026-06-22)
-- [ ] **Phase 3: Brain + Voice + the Cloud** - Pluggable cloud/local brain, whisper STT, AVSpeechSynthesizer TTS with boundary callbacks, Metal particle cloud, Stage controller choreographing widgets to speech (spec Phase 2)
+- [x] **Phase 3: Brain + Voice + the Cloud** - Pluggable cloud/local brain, whisper STT, AVSpeechSynthesizer TTS with boundary callbacks, Metal particle cloud, Stage controller choreographing widgets to speech (spec Phase 2) (completed 2026-06-22)
 - [ ] **Phase 4: Routines + Claude Code + Finance** - Morning-brief engine, email reply flow, finance aggregation + encrypted store + 4-layer leak prevention, Claude Code bridge (spec Phase 3)
 - [ ] **Phase 5: Safety + Self-Maintenance** - GATED: tiered gate + `/override` + circuit breaker, nightly consolidation/cleanup/backup, self changelog + metrics (spec Phase 4)
 
@@ -70,7 +70,7 @@ Plans:
 - [x] 03-01-PLAN.md — Daemon brains (wave 1): ClaudeBrain (default, claude-opus-4-8, manual tool loop) + LocalBrain (Ollama, absent-tolerant) + ClaudeCodeBrain (headless `claude -p`, Green/Yellow-only) + always-on 7B helper + cue assembler + brain=cloud|local Settings + additive IPC arms + extended e2e (BRAIN-02..06, VOICE-02, CLOUD-04, CLOUD-01)
 - [x] 03-02-PLAN.md — Daemon-side voice (wave 1): absent-tolerant whisper.cpp subprocess STT wrapper + stdout parser (binary mocked; binary-absent → typed escalation, never crashes the loop) (VOICE-01)
 - [x] 03-03-PLAN.md — Face bootstrap + TTS-boundary SPIKE (wave 1): Kernel.xcodeproj (TCC-stable identity, Info.plist, entitlements) + MenuBarExtra shell + XCTest target + the mandated on-device `willSpeakRangeOfSpeechString` spike (retained synth property) — gates the Stage; verdict in SPIKE-VERDICT.md (VOICE-03, CLOUD-01)
-- [ ] 03-04-PLAN.md — The Face app (wave 3, after 03-01 + 03-03): NWConnection UDS client + Metal particle cloud + Face-local mic RMS + Speaker + dual-paced Stage + ONE widget (events) choreographed end-to-end + two cloud states + design tokens (CLOUD-01..06, VOICE-02/03/04)
+- [x] 03-04-PLAN.md — The Face app (wave 3, after 03-01 + 03-03): NWConnection UDS client + Metal particle cloud + Face-local mic RMS + Speaker + dual-paced Stage + ONE widget (events) choreographed end-to-end + two cloud states + design tokens (CLOUD-01..06, VOICE-02/03/04)
 **UI hint**: yes
 
 ### Phase 4: Routines + Claude Code + Finance
@@ -109,6 +109,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (Phase 5 GATED — re
 |-------|----------------|--------|-----------|
 | 1. Skeleton (spec P0) | 3/3 | Complete   | 2026-06-22 |
 | 2. Hands (spec P1) | 3/3 | Complete   | 2026-06-22 |
-| 3. Brain + Voice + the Cloud (spec P2) | 3/4 | In Progress|  |
+| 3. Brain + Voice + the Cloud (spec P2) | 4/4 | Complete   | 2026-06-22 |
 | 4. Routines + Claude Code + Finance (spec P3) | 0/TBD | Not started | - |
 | 5. Safety + Self-Maintenance (spec P4) [GATED] | 0/TBD | Gated — owner approval required | - |
