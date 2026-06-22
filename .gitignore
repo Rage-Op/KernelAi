@@ -141,3 +141,8 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# kernel-memory/ is its OWN git repo (separate remote + backup lifecycle, spec §5/§14).
+# The code monorepo never tracks it, so the finance ignore + future GitHub backup
+# never touch code history.
+kernel-memory/
