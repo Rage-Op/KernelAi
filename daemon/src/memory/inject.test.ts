@@ -53,10 +53,12 @@ test('IDENTITY + current are never truncated; retrieved overflow is SKIPPED not 
   assert.ok(out.includes(current.trim()), 'current.md is present in full (never truncated)');
   assert.ok(out.length <= INJECT_CAP, 'total under the cap');
 
-  // 30 × ~1515-char docs = ~45K of retrievable text; under a 16K cap most are skipped.
-  const fitCount = (out.match(/DDDD/g) ?? []).length; // crude marker of how many big docs landed
-  const totalDocsText = 30;
-  assert.ok(fitCount < totalDocsText * 100, 'at least one low-priority retrieved item was skipped');
+  // 30 × ~1515-char docs ≈ 45K of retrievable text; under a 16K cap most CANNOT fit.
+  // The big-doc body is a run of 'D'; count how many full 1500-D runs survived in the
+  // output vs how many were written — at least one must have been skipped (not truncated).
+  const survivingBigDocs = (out.match(/D{1500}/g) ?? []).length;
+  assert.ok(survivingBigDocs > 0, 'some retrieved docs fit (sanity: retrieval is working)');
+  assert.ok(survivingBigDocs < 30, 'at least one low-priority retrieved item was skipped');
 });
 
 test('external (source: external) items are excluded from privileged context', async () => {
