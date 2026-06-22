@@ -17,17 +17,17 @@
 
 ### Memory (MEM) — Phase 1 (base, spec P0), Phase 5 (consolidation/prune, spec P4)
 
-- [ ] **MEM-01**: Memory lives as Markdown + YAML front-matter in a dedicated git repo (`kernel-memory/`) with the spec's directory layout (IDENTITY, working-memory, knowledge, tasks, projects, logs, self).
+- [x] **MEM-01**: Memory lives as Markdown + YAML front-matter in a dedicated git repo (`kernel-memory/`) with the spec's directory layout (IDENTITY, working-memory, knowledge, tasks, projects, logs, self).
 - [ ] **MEM-02**: `IDENTITY.md` (persona + voice rules) is injected at the start of every session and is never auto-edited.
 - [ ] **MEM-03**: Session injection follows priority order (IDENTITY → working-memory/current → retrieved knowledge/tasks/projects) under a hard ~16K-char cap.
 - [ ] **MEM-04**: Relevant memory is retrieved by keyword (no embeddings) and reranked by an authority×recency signal.
-- [ ] **MEM-05**: Externally-sourced content (email/web) carries a `source:` provenance tag through the context layer and lands in a `working-memory/quarantine/` bucket; it is never auto-promoted to `knowledge/` or `IDENTITY.md`. *(P0 seam; promotion gate completes in P4.)*
-- [ ] **MEM-06**: The `kernel-memory/finance/` path is gitignored and excluded from any backup.
+- [x] **MEM-05**: Externally-sourced content (email/web) carries a `source:` provenance tag through the context layer and lands in a `working-memory/quarantine/` bucket; it is never auto-promoted to `knowledge/` or `IDENTITY.md`. *(P0 seam; promotion gate completes in P4.)*
+- [x] **MEM-06**: The `kernel-memory/finance/` path is gitignored and excluded from any backup.
 - [ ] **MEM-07**: A nightly consolidation job distills logs → reflections and promotes durable facts → knowledge; a cleanup job prunes stale working-memory/logs. *(Phase 5 / spec P4.)*
 
 ### Brain (BRAIN) — Phase 1 (interface + stub, spec P0), Phase 3 (impls, spec P2)
 
-- [ ] **BRAIN-01**: A `BrainProvider` interface — `reason(prompt, context) → { thought, action?, reply? }` — is defined in Phase 1, before any implementation.
+- [x] **BRAIN-01**: A `BrainProvider` interface — `reason(prompt, context) → { thought, action?, reply? }` — is defined in Phase 1, before any implementation.
 - [ ] **BRAIN-02**: `ClaudeBrain` (Anthropic API, `claude-opus-4-8`) is the default brain for hard planning, recovery, and judgment.
 - [ ] **BRAIN-03**: `LocalBrain` POSTs to Ollama `/api/chat` (`qwen2.5:7b-instruct-q4_K_M`) and is selectable from Settings (`brain = cloud | local`); the UI surfaces that local is private/free but visibly weaker on 16GB.
 - [ ] **BRAIN-04**: A `ClaudeCodeBrain` routes code-heavy reasoning to Claude Code headless.
@@ -107,9 +107,9 @@
 
 ### Persona & Voice (PERS) — Phase 1 (IDENTITY, spec P0), refined through Phase 4 (spec P3)
 
-- [ ] **PERS-01**: To Pravin, KERNEL is direct, terse, reporting-style — no bargaining once a task is stated; only vital details in notifications.
-- [ ] **PERS-02**: For outward content, register is dynamic — warm for personal email, sharp for posts, formal for docs.
-- [ ] **PERS-03**: On vocabulary mismatch, KERNEL elaborates/clarifies rather than guessing.
+- [x] **PERS-01**: To Pravin, KERNEL is direct, terse, reporting-style — no bargaining once a task is stated; only vital details in notifications.
+- [x] **PERS-02**: For outward content, register is dynamic — warm for personal email, sharp for posts, formal for docs.
+- [x] **PERS-03**: On vocabulary mismatch, KERNEL elaborates/clarifies rather than guessing.
 
 ## v2 Requirements
 
@@ -146,7 +146,7 @@ GSD phases are 1-indexed; the spec (§16) is 0-indexed. The mapping is one GSD p
 | CORE-01..05 | Phase 1 (spec P0) | Pending |
 | MEM-01..06 | Phase 1 (spec P0) | Pending |
 | MEM-07 | Phase 5 (spec P4; gated) | Pending |
-| BRAIN-01 | Phase 1 (spec P0) | Pending |
+| BRAIN-01 | Phase 1 (spec P0) | Complete |
 | BRAIN-02..06 | Phase 3 (spec P2) | Pending |
 | PERS-01..03 | Phase 1 (spec P0; refined through Phase 4) | Pending |
 | HANDS-01..05 | Phase 2 (spec P1) | Pending |
