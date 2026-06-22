@@ -21,12 +21,42 @@ import { config } from '../config.js';
 import { FrameSchema, type Frame } from './protocol.js';
 import { enqueue } from '../loop.js';
 import { applySettings } from '../settings.js';
+import { signalBreakerCancel, setBreakerBroadcast } from '../tools/registry.js';
+import { overrideSingleton } from '../safety/override.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
 
 /** A handler invoked for every successfully-parsed, schema-valid inbound frame. */
 export type FrameHandler = (frame: Frame, conn: net.Socket) => void;
+
+/**
+ * Every currently-connected Face client. Server→client pushes (the breaker.preview frame)
+ * fan out to all of them via `broadcast`. A socket is added on connect and removed on
+ * close/error so a disconnected Face never receives a write (which would otherwise EPIPE).
+ */
+const clients = new Set<net.Socket>();
+
+/**
+ * Push a frame to EVERY connected Face client. This is how the breaker's `emitPreview`
+ * reaches the Face (SAFE-03): the daemon broadcasts the dry-run preview so the owner sees
+ * the 10s cancel window. A write to a dead socket is swallowed (the socket's own 'error'
+ * handler removes it) so a broadcast never crashes the daemon. Returns the number of
+ * clients the frame was written to (0 == headless: the action stays gated by ceiling+audit,
+ * but a live cancel is not possible — see SAFE-03 locked decision: proceed after the window).
+ */
+export function broadcast(frame: Frame): number {
+  let delivered = 0;
+  for (const conn of clients) {
+    try {
+      send(conn, frame);
+      delivered++;
+    } catch {
+      /* a dead socket is cleaned up by its own error/close handler */
+    }
+  }
+  return delivered;
+}
 
 /** The running IPC server handle returned to callers (e.g. the e2e). */
 export interface IpcServer {
@@ -112,12 +142,33 @@ export function startIpc(
     /* no stale socket — fine */
   }
 
+  // The registry's production breaker `emitPreview` calls THIS server's broadcast so a Red
+  // dry-run preview reaches every connected Face (SAFE-03). Injected here so the breaker logic
+  // (safety/breaker.ts) stays pure + the registry has no static dependency on the server (no
+  // import cycle). Each preview gets a fresh id the matching breaker.cancel frame correlates to.
+  setBreakerBroadcast((preview) => {
+    const id = `bp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    broadcast({
+      type: 'breaker.preview',
+      id,
+      summary: preview.summary,
+      estimatedSpend: preview.estimatedSpend,
+      tier: 'red',
+    });
+    return id;
+  });
+
   const server = net.createServer((conn) => {
     conn.setEncoding('utf8');
+    clients.add(conn);
     send(conn, { type: 'ready', daemon: DAEMON_NAME, version: DAEMON_VERSION });
     attachReader(conn, onFrame);
+    const drop = () => clients.delete(conn);
+    conn.on('close', drop);
+    conn.on('end', drop);
     conn.on('error', () => {
-      /* a client disconnecting mid-write must not crash the daemon */
+      // a client disconnecting mid-write must not crash the daemon; drop it from the fan-out set.
+      drop();
     });
   });
 
@@ -129,6 +180,8 @@ export function startIpc(
         server,
         close: () =>
           new Promise<void>((res) => {
+            for (const conn of clients) conn.destroy();
+            clients.clear();
             server.close(() => {
               try {
                 fs.unlinkSync(socketPath);
@@ -165,6 +218,22 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
       // P3 ADDITIVE arm: swap the active brain via the existing setBrain seam (settings.ts).
       // The 7B helper is unaffected. No reply frame in P3 — the toggle is fire-and-apply.
       applySettings(frame.brain);
+      break;
+    case 'override':
+      // P5 ADDITIVE arm (SAFE-02): the Face activates/deactivates the scoped /override
+      // capability. NEVER unlocks Red (override.allows('red') is structurally {gated:true}).
+      if (frame.active) {
+        // Default 10 min if the Face omits a ttl; the capability auto-expires on its own clock.
+        overrideSingleton().activate('face-override', frame.ttlMs ?? 600_000);
+      } else {
+        overrideSingleton().deactivate();
+      }
+      break;
+    case 'breaker.cancel':
+      // P5 ADDITIVE arm (SAFE-03): the owner cancelled a Red action within the 10s window.
+      // Flip the breaker's cancel latch (the in-flight gated run polls it and aborts WITHOUT
+      // executing). `id` correlates to the active preview; the registry ignores a stale id.
+      signalBreakerCancel(frame.id);
       break;
     default:
       // hello / ui.intent / ui.state / daemon-origin frames: no action here.

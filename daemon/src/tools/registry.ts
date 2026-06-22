@@ -23,7 +23,7 @@
 import { authorize } from '../safety/gate.js';
 import type { ToolCall } from '../brain/BrainProvider.js';
 import type { Tool, ToolResult } from './Tool.js';
-import { run as runBreaker, canonical, type BreakerDeps } from '../safety/breaker.js';
+import { run as runBreaker, canonical, type BreakerDeps, type DryRunPreview } from '../safety/breaker.js';
 import { createSpendLedger, defaultLedgerPath } from '../safety/spend-ledger.js';
 import { appendAudit, defaultAuditPath, type AuditEntry } from '../safety/audit.js';
 
@@ -45,13 +45,39 @@ export function setBreakerDeps(deps: BreakerDeps | null): void {
 
 /** Module-scoped cancel signal the IPC `breaker.cancel` frame flips (real wiring). */
 let breakerCancelled = false;
-/** Called by the IPC handler when a `breaker.cancel` frame arrives. */
-export function signalBreakerCancel(): void {
+/**
+ * The id of the breaker.preview currently surfaced to the Face (the in-flight gated run). The
+ * IPC server stamps a fresh id per preview and hands it back here via `setActivePreviewId`; an
+ * arriving breaker.cancel frame is only honoured when its `id` matches this active preview, so a
+ * stale/duplicate cancel for a prior action cannot abort a different in-flight run.
+ */
+let activePreviewId: string | null = null;
+
+/**
+ * The server-injected push that surfaces the breaker dry-run preview to every connected Face
+ * (SAFE-03). Returns the correlation id the matching breaker.cancel frame uses. Null until the
+ * IPC server wires it via `setBreakerBroadcast`; when null (or no Face connected) the preview is
+ * simply not surfaced and the action stays gated by ceiling+audit (a live cancel is not possible).
+ */
+let breakerBroadcast: ((preview: DryRunPreview) => string) | null = null;
+
+/** The IPC server injects its broadcast here at startup (avoids a server↔registry import cycle). */
+export function setBreakerBroadcast(fn: ((preview: DryRunPreview) => string) | null): void {
+  breakerBroadcast = fn;
+}
+
+/**
+ * Called by the IPC handler when a `breaker.cancel` frame arrives. Only flips the latch when the
+ * frame's `id` matches the active preview (or when no id discipline is in force — id omitted).
+ */
+export function signalBreakerCancel(id?: string): void {
+  if (id !== undefined && activePreviewId !== null && id !== activePreviewId) return;
   breakerCancelled = true;
 }
-/** Reset the cancel latch before a new gated run (real wiring). */
+/** Reset the cancel latch + active preview before a new gated run (real wiring). */
 export function resetBreakerCancel(): void {
   breakerCancelled = false;
+  activePreviewId = null;
 }
 
 /** Build the REAL breaker deps for a tool (lazy; uses config at call time, never at import). */
@@ -67,8 +93,14 @@ async function defaultBreakerDeps(tool: Tool): Promise<BreakerDeps> {
   return {
     clock: { now: () => Date.now(), sleep: (ms: number) => new Promise((r) => setTimeout(r, ms)) },
     cancelled: () => breakerCancelled,
-    emitPreview: () => {
-      /* the IPC server pushes a breaker.preview frame; wired at the server in a later plan. */
+    emitPreview: (preview: DryRunPreview) => {
+      // SAFE-03: broadcast the dry-run preview to every connected Face over the live IPC server.
+      // The server stamps a correlation id and returns it; we stash it so the matching
+      // breaker.cancel frame (carrying the same id) is the one that flips the cancel latch. If the
+      // server is not wired (e.g. a --backup short-lived job) or NO Face is connected, the preview
+      // simply isn't surfaced: the action stays gated by the ceiling + audit, but a live owner
+      // cancel is not possible — per the locked SAFE-03 decision the window then PROCEEDS.
+      activePreviewId = breakerBroadcast ? breakerBroadcast(preview) : null;
     },
     ledger,
     audit: (entry: AuditEntry) => appendAudit(entry, defaultAuditPath(config.memoryDir)),
@@ -80,6 +112,9 @@ async function defaultBreakerDeps(tool: Tool): Promise<BreakerDeps> {
     // TOCTOU: re-read whatever world state matters for the tool. Default is the canonical call
     // shape (a stable hash for ops whose state is the call itself); a tool may surface more later.
     reReadState: async (call: ToolCall) => canonical(call),
+    // The cancel window length. Spec §8 = 10s; owner/test-overridable via env. The window exists
+    // for the owner to CANCEL via the Face's breaker.cancel frame; absent a cancel it proceeds.
+    windowMs: Number(process.env.KERNEL_BREAKER_WINDOW_MS ?? 10_000),
   };
 }
 
