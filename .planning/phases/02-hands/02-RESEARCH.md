@@ -236,7 +236,7 @@ export async function authorize(call: ToolCall): Promise<Verdict> {
   }
   const tier = classifyTier(call);
   logger.info({ tool: call.tool, tier }, 'gate: classified');
-  if (tier === 'red') return { kind: 'gated', tier };   // P2: classified only — proceeds; P5: breaker hooks here
+  if (tier === 'red') return { kind: 'deny', tier, escalation: { reason: 'red-tier requires Phase 5 breaker' } };  // P2 LOCKED: Red = deny + escalate (no Red autonomy pre-P5); P5 flips this branch to { kind: 'gated' } where the breaker hooks in
   return { kind: 'allow', tier };
 }
 ```
