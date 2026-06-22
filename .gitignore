@@ -146,3 +146,5 @@ vite.config.ts.timestamp-*
 # The code monorepo never tracks it, so the finance ignore + future GitHub backup
 # never touch code history.
 kernel-memory/
+.DS_Store
+**/.DS_Store
