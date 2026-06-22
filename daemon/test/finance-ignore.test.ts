@@ -12,19 +12,34 @@ import { config } from '../src/config.js';
 
 const memDir = config.memoryDir;
 
-test('git check-ignore: a finance-pathed file is ignored', () => {
-  // `git check-ignore <path>` exits 0 if the path is ignored, 1 if not.
-  // We do NOT pass --error-unmatch; a clean exit 0 + printed path = ignored.
-  let ignored = false;
+/** True iff `git check-ignore <relPath>` reports the path as ignored (exit 0 + printed). */
+function isIgnored(relPath: string): boolean {
   try {
-    const out = execFileSync('git', ['-C', memDir, 'check-ignore', 'finance/x.db'], {
+    const out = execFileSync('git', ['-C', memDir, 'check-ignore', relPath], {
       encoding: 'utf8',
     });
-    ignored = out.trim().length > 0;
+    return out.trim().length > 0;
   } catch {
-    ignored = false; // non-zero exit => path is NOT ignored
+    return false; // non-zero exit => path is NOT ignored
   }
-  assert.ok(ignored, 'finance/x.db must be gitignored in kernel-memory/');
+}
+
+test('git check-ignore: a finance-pathed file is ignored', () => {
+  assert.ok(isIgnored('finance/x.db'), 'finance/x.db must be gitignored in kernel-memory/');
+});
+
+test('FIN-04a: the REAL finance DB filename is ignored', () => {
+  assert.ok(isIgnored('finance/finance.db'), 'finance/finance.db must be gitignored');
+});
+
+test('FIN-04a: every SQLCipher sidecar (-wal/-shm/-journal) is ignored', () => {
+  for (const sidecar of [
+    'finance/finance.db-wal',
+    'finance/finance.db-shm',
+    'finance/finance.db-journal',
+  ]) {
+    assert.ok(isIgnored(sidecar), `${sidecar} must be gitignored (SQLCipher sidecar)`);
+  }
 });
 
 test('git ls-files: nothing finance-pathed is tracked', () => {
