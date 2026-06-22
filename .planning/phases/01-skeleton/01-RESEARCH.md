@@ -766,7 +766,7 @@ function score(query: Set<string>, doc: { text: string; path: string; ageDays: n
 | A6 | `working-memory/current.md` adopts the reference's ~2.5K-char frozen-snapshot cap | Memory Mechanics | LOW — a recommended discipline, tunable |
 | A7 | The reranker `authority_weights` paths/values (adapted from the reference) are a sensible default | Retrieval rerank | LOW — directly ported; tunable per measured recall |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **IPC transport: UDS+NDJSON vs WebSocket — a documented internal divergence.**
    - What we know: The phase brief, `KERNEL_MASTER_BUILD_PROMPT` §2, and `STACK.md` all pin **Unix domain socket + NDJSON**. `ARCHITECTURE.md` "Internal Boundaries" instead proposes **localhost WebSocket** (Node `ws` + Swift `URLSessionWebSocketTask`), arguing WS is needed for server→client push of `speak`/`stage` frames.
