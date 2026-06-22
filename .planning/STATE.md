@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-22T09:04:28.190Z"
-last_activity: "2026-06-22 — Completed 01-01 (skeleton foundation: daemon scaffold, BrainProvider seam, kernel-memory seed, RED e2e contract)"
+last_updated: "2026-06-22T09:17:21.275Z"
+last_activity: 2026-06-22
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-22)
 ## Current Position
 
 Phase: 1 of 5 (Skeleton — spec Phase 0)
-Plan: 1 of 3 in current phase
-Status: In progress — 01-01 complete; ready for 01-02
-Last activity: 2026-06-22 — Completed 01-01 (skeleton foundation: daemon scaffold, BrainProvider seam, kernel-memory seed, RED e2e contract)
+Plan: 2 of 3 in current phase
+Status: Ready to execute
+Last activity: 2026-06-22
 
-Progress: [███░░░░░░░] 33%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [███░░░░░░░] 33%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 6 min | 4 tasks | 20 files |
+| Phase 01-skeleton P02 | 5min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,10 @@ Recent decisions affecting current work:
 - [Roadmap]: Three cross-phase security seams pulled forward as acceptance criteria — provenance/quarantine (Phase 1), `gate.authorize` chokepoint (Phase 2), 4-layer finance-leak prevention (Phase 4, verified before any backup).
 - [Roadmap]: Phase 5 (spec Phase 4) is GATED — enables money/`rm -rf`/`/override`. Build Phases 1–4 autonomously; HARD-STOP before Phase 5.
 - [Phase 01]: Pinned all Phase-1 npm deps exactly (no caret); kernel-memory/ kept as a separate git repo via parent .gitignore
+- [Phase ?]: inject() query is optional (e2e calls inject() no-arg); current.md is the query basis when omitted
+- [Phase ?]: IDENTITY baseline auto-seeds on first run (idempotent) but never auto-re-baselines; out-of-band change fails loud
+- [Phase ?]: External content excluded from injection by BOTH retrieve authority 0.0 AND inject source filter (defense-in-depth)
+- [Phase ?]: Memory modules take memoryDir as a defaulted param (config.memoryDir) for temp-dir unit testing
 
 ### Pending Todos
 
@@ -90,6 +95,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T09:01:46.740Z
+Last session: 2026-06-22T09:17:02.282Z
 Stopped at: ROADMAP.md and STATE.md created; REQUIREMENTS.md traceability confirmed (53/53 mapped). Ready to plan Phase 1.
 Resume file: None

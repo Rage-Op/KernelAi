@@ -18,9 +18,9 @@
 ### Memory (MEM) — Phase 1 (base, spec P0), Phase 5 (consolidation/prune, spec P4)
 
 - [x] **MEM-01**: Memory lives as Markdown + YAML front-matter in a dedicated git repo (`kernel-memory/`) with the spec's directory layout (IDENTITY, working-memory, knowledge, tasks, projects, logs, self).
-- [ ] **MEM-02**: `IDENTITY.md` (persona + voice rules) is injected at the start of every session and is never auto-edited.
-- [ ] **MEM-03**: Session injection follows priority order (IDENTITY → working-memory/current → retrieved knowledge/tasks/projects) under a hard ~16K-char cap.
-- [ ] **MEM-04**: Relevant memory is retrieved by keyword (no embeddings) and reranked by an authority×recency signal.
+- [x] **MEM-02**: `IDENTITY.md` (persona + voice rules) is injected at the start of every session and is never auto-edited.
+- [x] **MEM-03**: Session injection follows priority order (IDENTITY → working-memory/current → retrieved knowledge/tasks/projects) under a hard ~16K-char cap.
+- [x] **MEM-04**: Relevant memory is retrieved by keyword (no embeddings) and reranked by an authority×recency signal.
 - [x] **MEM-05**: Externally-sourced content (email/web) carries a `source:` provenance tag through the context layer and lands in a `working-memory/quarantine/` bucket; it is never auto-promoted to `knowledge/` or `IDENTITY.md`. *(P0 seam; promotion gate completes in P4.)*
 - [x] **MEM-06**: The `kernel-memory/finance/` path is gitignored and excluded from any backup.
 - [ ] **MEM-07**: A nightly consolidation job distills logs → reflections and promotes durable facts → knowledge; a cleanup job prunes stale working-memory/logs. *(Phase 5 / spec P4.)*
