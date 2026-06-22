@@ -15,6 +15,10 @@ import path from 'node:path';
 
 import { enqueue, drain, runTick, isRunning, queueDepth, setBrain, type Intent } from './loop.js';
 import { StubBrain } from './brain/StubBrain.js';
+import { z } from 'zod';
+import type { BrainProvider, Decision, ToolCall } from './brain/BrainProvider.js';
+import { register, clearRegistry } from './tools/registry.js';
+import type { Tool, ToolResult } from './tools/Tool.js';
 
 /** A temp memory dir with the minimum inject() needs: IDENTITY.md, current.md, logs/. */
 function tempMemoryDir(): string {
@@ -96,4 +100,65 @@ test('loop: runTick on an empty queue is a no-op and stays idle', async () => {
   await runTick();
   assert.equal(isRunning(), false);
   assert.equal(queueDepth(), 0);
+});
+
+/** A fake brain that always returns a fixed action (the act-seam test seam). */
+class ActionBrain implements BrainProvider {
+  constructor(private readonly action: ToolCall) {}
+  async reason(prompt: string): Promise<Decision> {
+    return { thought: `act on: ${prompt.slice(0, 40)}`, action: this.action };
+  }
+}
+
+/** A stub green tool whose execute flips `reached` so "the dispatch reached it" is assertable. */
+function stubTool(name: string): { tool: Tool; reached: () => boolean } {
+  let executed = false;
+  const tool: Tool = {
+    name,
+    schema: z.object({ op: z.string() }).passthrough(),
+    async execute(): Promise<ToolResult> {
+      executed = true;
+      return { ok: true };
+    },
+  };
+  return { tool, reached: () => executed };
+}
+
+test('loop: act seam dispatches an allowed green action through the router to the tool', async () => {
+  clearRegistry();
+  const { tool, reached } = stubTool('stub');
+  register(tool);
+  setBrain(new ActionBrain({ tool: 'stub', args: { op: 'click' } }));
+
+  const memoryDir = tempMemoryDir();
+  const replies: string[] = [];
+  enqueue({ source: 'user', id: 'act-1', payload: 'do a click', memoryDir, reply: (t) => replies.push(t) });
+  await runTick();
+
+  assert.equal(reached(), true, 'the dispatch reached the tool through the gate (green → allow)');
+  assert.equal(replies.length, 0, 'an allowed action produces no Blocked reply');
+  assert.equal(isRunning(), false, 'idle after the tick');
+});
+
+test('loop: a gate-denied action surfaces a Blocked reply and the tool never executes', async () => {
+  clearRegistry();
+  // The fence applies to browser fill of a Password field — the gate denies before execute.
+  const { tool, reached } = stubTool('browser');
+  register(tool);
+  setBrain(new ActionBrain({ tool: 'browser', args: { op: 'fill', fieldLabel: 'Password' } }));
+
+  const memoryDir = tempMemoryDir();
+  const replies: string[] = [];
+  enqueue({ source: 'user', id: 'act-2', payload: 'fill the password', memoryDir, reply: (t) => replies.push(t) });
+  await runTick();
+
+  assert.equal(reached(), false, 'a denied action never reaches the tool execute');
+  assert.equal(replies.length, 1, 'a Blocked reply is surfaced to the originator');
+  assert.match(replies[0], /^Blocked:/, 'the reply is prefixed Blocked:');
+  assert.match(replies[0], /secure\/credential field/, 'the fence reason is surfaced');
+  assert.equal(isRunning(), false, 'idle after the tick');
+
+  // restore the StubBrain so any later-ordered tests are unaffected.
+  setBrain(new StubBrain());
+  clearRegistry();
 });

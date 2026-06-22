@@ -20,6 +20,7 @@ import type { BrainProvider } from './brain/BrainProvider.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { inject } from './memory/inject.js';
 import { logSession } from './memory/log.js';
+import { dispatch } from './tools/registry.js';
 
 /** A unit of work for the loop. `reply` surfaces the brain's text to the originator. */
 export interface Intent {
@@ -92,9 +93,17 @@ export function drain(): Promise<void> {
         const context = await inject(promptFor(intent), intent.memoryDir);
         // decide: route even the stub through reason() so the seam is real.
         const decision = await brain.reason(promptFor(intent), context);
-        // act: no tools exist in P1; a real decision.action dispatches here in P2+.
+        // act: dispatch a real decision.action through the router. The loop NEVER imports the
+        // gate or a tool directly — dispatch() runs gate.authorize internally, preserving the
+        // single-chokepoint invariant. A blocked/escalated result is surfaced like a reply.
         if (decision.action) {
-          // P2+: router.dispatch(decision.action) — gated by the safety chokepoint.
+          const result = await dispatch(decision.action);
+          if (!result.ok && result.escalation && intent.reply) {
+            intent.reply(
+              `Blocked: ${result.escalation.reason}` +
+                (result.escalation.recommendation ? ` — ${result.escalation.recommendation}` : ''),
+            );
+          }
         }
         // log: append a ## Session block (append-only, CORE-05).
         logSession({ intent, decision }, intent.memoryDir);
