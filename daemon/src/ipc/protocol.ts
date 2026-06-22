@@ -47,6 +47,17 @@ export const UiIntentSchema = z.object({
   payload: z.unknown().optional(),
 });
 
+/**
+ * P3 ADDITIVE arm (CLOUD-01): the Settings brain toggle (Face→daemon). Selecting
+ * `local` swaps the active brain to LocalBrain (Ollama) via `loop.setBrain`; `cloud`
+ * swaps to ClaudeBrain. The always-on 7B helper runs regardless of this toggle.
+ * Appended to the frozen FrameSchema union — existing arms are NEVER mutated.
+ */
+export const SettingsSchema = z.object({
+  type: z.literal('settings'),
+  brain: z.enum(['cloud', 'local']),
+});
+
 // --- daemon → Face -------------------------------------------------------------
 
 /** Sent unprompted on connect — proves the Face can attach without a daemon restart. */
@@ -102,6 +113,17 @@ export const WidgetDataSchema = z.object({
   data: z.unknown(),
 });
 
+/**
+ * P3 ADDITIVE arm (CLOUD-05): the cloud scene state (daemon→Face). Drives the single
+ * animated scene between full-screen (boot/speaking), the top-left corner pill (a
+ * Claude Code session), and idle. Appended to the frozen FrameSchema union — existing
+ * arms are NEVER mutated. The Swift Face mirrors this arm.
+ */
+export const UiStateSchema = z.object({
+  type: z.literal('ui.state'),
+  state: z.enum(['fullscreen', 'cornerPill', 'idle']),
+});
+
 /** Sent when a line fails to parse/validate, or a frame cannot be handled. */
 export const ErrorSchema = z.object({
   type: z.literal('error'),
@@ -119,12 +141,14 @@ export const FrameSchema = z.discriminatedUnion('type', [
   UtteranceSchema,
   PingSchema,
   UiIntentSchema,
+  SettingsSchema, // P3 additive (Face→daemon brain toggle)
   // daemon → Face
   ReadySchema,
   ReplySchema,
   PongSchema,
   SpeakSchema,
   WidgetDataSchema,
+  UiStateSchema, // P3 additive (daemon→Face cloud scene state)
   ErrorSchema,
 ]);
 
@@ -136,11 +160,13 @@ export type Hello = z.infer<typeof HelloSchema>;
 export type Utterance = z.infer<typeof UtteranceSchema>;
 export type Ping = z.infer<typeof PingSchema>;
 export type UiIntent = z.infer<typeof UiIntentSchema>;
+export type Settings = z.infer<typeof SettingsSchema>;
 export type Ready = z.infer<typeof ReadySchema>;
 export type Reply = z.infer<typeof ReplySchema>;
 export type Pong = z.infer<typeof PongSchema>;
 export type Speak = z.infer<typeof SpeakSchema>;
 export type WidgetData = z.infer<typeof WidgetDataSchema>;
+export type UiState = z.infer<typeof UiStateSchema>;
 export type ErrorFrame = z.infer<typeof ErrorSchema>;
 
 /**

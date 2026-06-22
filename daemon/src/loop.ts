@@ -45,9 +45,14 @@ let inflight: Promise<void> | null = null;
 /** The active brain (swap-seam). Defaults to StubBrain; overridable for tests. */
 let brain: BrainProvider = new StubBrain();
 
-/** Override the brain (test seam / future ClaudeBrain wiring). */
+/** Override the brain (test seam / Settings brain-swap wiring via settings.ts). */
 export function setBrain(b: BrainProvider): void {
   brain = b;
+}
+
+/** Read the active brain (test seam — lets settings.test assert which brain is selected). */
+export function getActiveBrain(): BrainProvider {
+  return brain;
 }
 
 /** True while a drain pass is in flight. Exposed for tests asserting idle. */

@@ -58,3 +58,37 @@ test('protocol: the designed-for P2/P3 shapes are part of the frozen contract', 
     true,
   );
 });
+
+// --- P3 ADDITIVE arms (CLOUD-01 / CLOUD-05) — settings + ui.state round-trip ---
+
+test('protocol: a settings frame (brain toggle) round-trips through FrameSchema', () => {
+  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'cloud' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'local' }).success, true);
+  // an out-of-enum brain is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'martian' }).success, false);
+  // missing brain is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'settings' }).success, false);
+});
+
+test('protocol: a ui.state frame (cloud scene state) round-trips through FrameSchema', () => {
+  for (const state of ['fullscreen', 'cornerPill', 'idle']) {
+    assert.equal(FrameSchema.safeParse({ type: 'ui.state', state }).success, true, state);
+  }
+  // an out-of-enum state is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'ui.state', state: 'maximized' }).success, false);
+});
+
+test('protocol: a speak frame carrying cues[] + onFinish round-trips (the frozen SpeakSchema)', () => {
+  const r = FrameSchema.safeParse({
+    type: 'speak',
+    id: 's2',
+    text: "You've got three events today, and your checking is at twelve hundred.",
+    cues: [
+      { atChar: 9, action: 'stage.present', widget: 'events', data: { count: 3 } },
+      { atChar: 40, action: 'stage.dismiss', widget: 'events' },
+      { atChar: 48, action: 'stage.present', widget: 'accounts', data: { balance: 1200 } },
+    ],
+    onFinish: [{ action: 'stage.dismiss', widget: 'accounts' }],
+  });
+  assert.equal(r.success, true, 'speak with cues[] + onFinish must round-trip');
+});
