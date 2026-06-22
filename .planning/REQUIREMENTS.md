@@ -68,11 +68,11 @@
 
 ### Email Reply Flow (MAIL) — Phase 4 (spec P3)
 
-- [ ] **MAIL-01**: On "reply", KERNEL asks Pravin for one-line intent, then rewrites it into Pravin's email voice using a ~200-token voice profile distilled once from real sent mail (greeting, sign-off, sentence length, formality range, emoji y/n), always injected.
-- [ ] **MAIL-02**: Few-shot retrieval pulls 2–3 of Pravin's past emails most similar to the recipient as live examples.
-- [ ] **MAIL-03**: Stakes routing — casual/short replies use the local 7B (free); high-stakes (new client, money, sensitive) use the cloud brain.
-- [ ] **MAIL-04**: A preview card (To / Subject / body / signature) is rendered; nothing sends without an explicit "Send it?" confirmation (Yellow-tier gate).
-- [ ] **MAIL-05**: KERNEL never auto-sends and never sends to an address that came from external content without showing it; on send it dispatches via Mail/Gmail, marks the source read, and logs.
+- [x] **MAIL-01**: On "reply", KERNEL asks Pravin for one-line intent, then rewrites it into Pravin's email voice using a ~200-token voice profile distilled once from real sent mail (greeting, sign-off, sentence length, formality range, emoji y/n), always injected.
+- [x] **MAIL-02**: Few-shot retrieval pulls 2–3 of Pravin's past emails most similar to the recipient as live examples.
+- [x] **MAIL-03**: Stakes routing — casual/short replies use the local 7B (free); high-stakes (new client, money, sensitive) use the cloud brain.
+- [x] **MAIL-04**: A preview card (To / Subject / body / signature) is rendered; nothing sends without an explicit "Send it?" confirmation (Yellow-tier gate).
+- [x] **MAIL-05**: KERNEL never auto-sends and never sends to an address that came from external content without showing it; on send it dispatches via Mail/Gmail, marks the source read, and logs.
 
 ### Finance (FIN) — Phase 4 (spec P3)
 
