@@ -35,6 +35,22 @@ Ollama is **absent on this machine**. Without it, `brain=local` and the always-o
   OLLAMA_MAX_LOADED_MODELS=1 ollama serve
   ```
 
+## Service Setup (whisper.cpp — optional, for live STT / VOICE-01)
+
+whisper.cpp is **absent on this machine** (no `whisper-cli` on PATH). Without it, `transcribe()` degrades to a typed escalation (`whisper.cpp not found — build it`) and never crashes the loop. The wrapper + parser are fully unit-tested with the binary mocked, so the build and full suite pass WITHOUT whisper.cpp. To enable **live** mic→transcript:
+
+- [ ] **Build whisper.cpp with the Core ML / ANE backend** and put `whisper-cli` on PATH.
+  - URL: https://github.com/ggml-org/whisper.cpp (see the Core ML build steps).
+- [ ] **Supply a model** (e.g. `ggml-base.en.bin` / `ggml-small.en.bin`).
+- [ ] **(Optional) Override the defaults** — the daemon reads these env vars if set:
+
+  | Status | Variable | Default | Purpose |
+  |--------|----------|---------|---------|
+  | [ ] | `WHISPER_CLI` | `whisper-cli` | The whisper.cpp CLI binary (path or PATH name) |
+  | [ ] | `WHISPER_MODEL` | `models/ggml-base.en.bin` | The ggml model file fed to `-m` |
+
+- [ ] **Manual owner check (NOT automated):** with whisper.cpp built + a mic + the Microphone TCC grant on the Face, speak and confirm a live transcript reaches the loop as an utterance.
+
 ## Verification
 
 After completing setup, verify with:
