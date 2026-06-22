@@ -12,7 +12,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { assertFinanceNotTracked } from './leakguard.js';
-import { makeTempGitRepo, cleanupTempRepo, writeRepoFile, git } from '../../test/helpers/temp-git-repo.js';
+import { makeTempGitRepo, cleanupTempRepo, writeRepoFile, git } from './leak-test-helpers.js';
 
 const repos: string[] = [];
 afterEach(() => {

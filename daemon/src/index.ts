@@ -13,13 +13,12 @@
  *   2. Finance assertion: `git -C <memoryDir> ls-files | grep -i finance` must be empty;
  *      anything finance-pathed being tracked fails loud (T-01-12 / MEM-06).
  */
-import { execFileSync } from 'node:child_process';
-
 import { config } from './config.js';
 import { logger } from './memory/log.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import { startIpcServer } from './ipc/server.js';
 import { runHeartbeat } from './heartbeat.js';
+import { assertFinanceNotTracked as leakguardAssert } from './safety/leakguard.js';
 
 /**
  * IDENTITY integrity guard. On first run records the SHA-256 baseline; thereafter any
@@ -37,30 +36,9 @@ function guardIdentity(memoryDir: string = config.memoryDir): string {
  * (greenfield/test); only an ACTUAL tracked finance path fails loud.
  */
 export function assertFinanceNotTracked(memoryDir: string = config.memoryDir): void {
-  let tracked: string;
-  try {
-    tracked = execFileSync('git', ['-C', memoryDir, 'ls-files'], {
-      encoding: 'utf8',
-    });
-  } catch {
-    // memoryDir is not a git repo (or git unavailable) — nothing tracked to assert against.
-    logger.warn(
-      { memoryDir },
-      'finance assertion skipped: memory dir is not a git repo (or git unavailable)',
-    );
-    return;
-  }
-  const offending = tracked
-    .split('\n')
-    .filter((f) => /finance/i.test(f))
-    .filter(Boolean);
-  if (offending.length > 0) {
-    throw new Error(
-      `CRITICAL: finance-pathed files are git-tracked in the memory repo (MEM-06 violation): ` +
-        offending.join(', ') +
-        `. Refusing to start — finance/ must NEVER be tracked or backed up.`,
-    );
-  }
+  // Delegate to the directly-tested safety/leakguard module (single source of truth, FIN-04d).
+  // Behavior is identical: throws on a real tracked finance path; tolerates a non-git dir.
+  leakguardAssert(memoryDir);
 }
 
 /** Run all startup guards. Throws (fail loud) if any guard trips. */

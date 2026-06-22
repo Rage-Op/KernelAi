@@ -25,7 +25,7 @@ import {
   cleanupTempRepo,
   writeRepoFile,
   git,
-} from './helpers/temp-git-repo.js';
+} from '../src/safety/leak-test-helpers.js';
 import { config } from '../src/config.js';
 
 const ZERO_SHA = '0000000000000000000000000000000000000000';

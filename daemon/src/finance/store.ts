@@ -119,7 +119,8 @@ export function openStore(dbPath: string, key: string): FinanceStore {
       upsertAccountStmt.run(a as unknown as Record<string, unknown>);
     },
     upsertTransaction(t) {
-      upsertTxStmt.run({ memo: '', ...t } as unknown as Record<string, unknown>);
+      // memo is required on TransactionRow; coalesce defensively in case a caller passes empty.
+      upsertTxStmt.run({ ...t, memo: t.memo ?? '' } as unknown as Record<string, unknown>);
     },
     listAccounts() {
       return db.prepare('SELECT id, name, type, balance FROM accounts ORDER BY id').all() as AccountRow[];
