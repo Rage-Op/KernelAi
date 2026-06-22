@@ -28,6 +28,7 @@
 		C75E111C26F08812690A866D /* StageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1ADCD649DA3432EADAEC68 /* StageController.swift */; };
 		C7B804AEED73EF401A504B2E /* BoundarySpike.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1ECABC73A7064F118CDB7C /* BoundarySpike.swift */; };
 		D88A92F3A0BE94C02FFD93BD /* SpendingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E9C2E13E9EFEB9185BCAA09 /* SpendingWidget.swift */; };
+		E89A73582776E9C984435FC2 /* EmailPreviewWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63092470ECF7A7269EEB57E4 /* EmailPreviewWidgetTests.swift */; };
 		F027D3F9A182E74DF34C573C /* WidgetRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7F120C9369A4789389E371 /* WidgetRenderTests.swift */; };
 		F038967A9CA01EA613799063 /* Frames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48D7F81C2056D4C22D02909D /* Frames.swift */; };
 		F2CD0BAA4669707EBF30247A /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F598C22C9E59BF99CBB93134 /* Motion.swift */; };
@@ -62,6 +63,7 @@
 		55DA7395386F5C580A2A5678 /* MailWidgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailWidgetTests.swift; sourceTree = "<group>"; };
 		5C1ADCD649DA3432EADAEC68 /* StageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageController.swift; sourceTree = "<group>"; };
 		6031C7693DB73B68A9F6ADED /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		63092470ECF7A7269EEB57E4 /* EmailPreviewWidgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailPreviewWidgetTests.swift; sourceTree = "<group>"; };
 		7B5D7D7D8E4B96BA7A8ED69B /* Kernel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Kernel.entitlements; sourceTree = "<group>"; };
 		962A24B4F107DB1A15EBA0EE /* CloudWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudWindow.swift; sourceTree = "<group>"; };
 		9C9F810A2EE7CDD4B516ADEF /* Kernel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kernel.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -137,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				E23763944C65D1590306AA94 /* BootstrapTests.swift */,
+				63092470ECF7A7269EEB57E4 /* EmailPreviewWidgetTests.swift */,
 				3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */,
 				55DA7395386F5C580A2A5678 /* MailWidgetTests.swift */,
 				16148C3EFEBBE30F2FCE9282 /* StageControllerTests.swift */,
@@ -310,6 +313,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				33AC917533E193EC87351912 /* BootstrapTests.swift in Sources */,
+				E89A73582776E9C984435FC2 /* EmailPreviewWidgetTests.swift in Sources */,
 				079CC7C6F258BB709F7A37AF /* FrameCodecTests.swift in Sources */,
 				7DAF4585F776F59FBE51BF75 /* MailWidgetTests.swift in Sources */,
 				0ED98BF241F2969FC4555008 /* StageControllerTests.swift in Sources */,

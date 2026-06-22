@@ -79,9 +79,15 @@ struct CloudWindow: View {
                 payload: EmailPreviewPayload.from(coordinator.presentedData["email-preview"]),
                 isPresented: true,
                 onSend: { p in
+                    // The ONLY send path: emit the Yellow ui.intent carrying the full preview so
+                    // the daemon's mail tool can dispatch the gated send (MAIL-05). The daemon —
+                    // never the Face — performs the send + mark-read.
                     coordinator.emitIntent("send-email", payload: .object([
                         "to": .string(p.to),
                         "subject": .string(p.subject),
+                        "body": .string(p.body),
+                        "signature": .string(p.signature),
+                        "toIsExternal": .number(p.toIsExternal ? 1 : 0),
                     ]))
                 },
                 onEdit: { coordinator.emitIntent("edit-email") })

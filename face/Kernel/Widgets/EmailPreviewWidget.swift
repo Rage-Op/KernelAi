@@ -48,6 +48,10 @@ struct EmailPreviewWidget: View {
     /// Re-open the intent to re-preview.
     var onEdit: (() -> Void)? = nil
 
+    /// After the user taps Send, the card shows a one-line "Sent. Marked read." confirmation.
+    /// This is a UI acknowledgement only — the daemon performs the gated send (MAIL-05).
+    @State private var didSend = false
+
     var body: some View {
         content
             .padding(Tokens.Space.lg)
@@ -66,6 +70,11 @@ struct EmailPreviewWidget: View {
     private var content: some View {
         if payload.errored {
             Text("Draft unavailable.")
+                .font(Tokens.Typography.heading)
+                .foregroundStyle(Tokens.textPrimary)
+        } else if didSend {
+            // One-line confirmation after the explicit Send (no credentials, ever).
+            Text("Sent. Marked read.")
                 .font(Tokens.Typography.heading)
                 .foregroundStyle(Tokens.textPrimary)
         } else {
@@ -125,8 +134,10 @@ struct EmailPreviewWidget: View {
             .buttonStyle(.plain)
 
             Button {
-                // The ONLY send path — emits the Yellow ui.intent via the parent.
+                // The ONLY send path — emits the Yellow ui.intent via the parent. The daemon
+                // dispatches the gated send; this card then shows the "Sent. Marked read." line.
                 onSend?(payload)
+                didSend = true
             } label: {
                 Text("Send")
                     .font(Tokens.Typography.body)
