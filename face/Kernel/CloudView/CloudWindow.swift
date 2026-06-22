@@ -45,8 +45,10 @@ struct CloudWindow: View {
         .transition(.opacity)
     }
 
-    /// Render a widget by name. Phase 3 ships the events widget end-to-end; the
-    /// other four are specified in 03-UI-SPEC and rendered in Phase 4.
+    /// Render a widget by name. Phase 3 shipped the events widget end-to-end; Phase 4
+    /// adds the four remaining widgets (04-UI-SPEC §2–§5), bound to the shipped
+    /// `coordinator.presentedData[name]` path. Chip / Send actions emit `ui.intent`s the
+    /// daemon dispatches through the gate (the Face never acts locally).
     @ViewBuilder
     private func widgetView(named name: String) -> some View {
         switch name {
@@ -54,6 +56,35 @@ struct CloudWindow: View {
             EventsWidget(
                 payload: EventsPayload.from(coordinator.presentedData["events"]),
                 isPresented: true)
+        case "mail":
+            MailWidget(
+                payload: MailPayload.from(coordinator.presentedData["mail"]),
+                isPresented: true,
+                onAction: { action, item in
+                    coordinator.emitIntent("mail-action", payload: .object([
+                        "action": .string(action.rawValue),
+                        "subject": .string(item.subject),
+                    ]))
+                })
+        case "accounts":
+            AccountsWidget(
+                payload: AccountsPayload.from(coordinator.presentedData["accounts"]),
+                isPresented: true)
+        case "spending":
+            SpendingWidget(
+                payload: SpendingPayload.from(coordinator.presentedData["spending"]),
+                isPresented: true)
+        case "email-preview":
+            EmailPreviewWidget(
+                payload: EmailPreviewPayload.from(coordinator.presentedData["email-preview"]),
+                isPresented: true,
+                onSend: { p in
+                    coordinator.emitIntent("send-email", payload: .object([
+                        "to": .string(p.to),
+                        "subject": .string(p.subject),
+                    ]))
+                },
+                onEdit: { coordinator.emitIntent("edit-email") })
         default:
             EmptyView()
         }

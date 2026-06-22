@@ -153,6 +153,22 @@ final class AppCoordinator: ObservableObject {
         presentedData[widget] = nil
     }
 
+    // MARK: Widget-originated UI intents (ROUT-04/05, MAIL) — gate-routed
+
+    /// Emit a `ui.intent` frame to the daemon. Widget chips (mail Log/Reply/Open/Archive),
+    /// the email-preview Send, and EventKit invitation replies all flow through here so the
+    /// daemon dispatches the resulting action through registry.dispatch → gate.authorize. The
+    /// Face never classifies a tier and never acts locally — it only emits the intent.
+    func emitIntent(_ intent: String, payload: JSONValue? = nil) {
+        let id = "ui-\(UUID().uuidString.prefix(8))"
+        let frame = Frame.uiIntent(id: id, intent: intent, payload: payload)
+        guard !Self.isUnderXCTest else {
+            log.info("under XCTest host — not sending ui.intent \(intent, privacy: .public)")
+            return
+        }
+        socket.send(frame)
+    }
+
     private func wireFrames() { /* socket.onFrame set in start() */ }
 
     // MARK: Launch-at-login (SMAppService.mainApp — CLOUD-01)
