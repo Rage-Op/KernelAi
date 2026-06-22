@@ -3,11 +3,11 @@
 **Defined:** 2026-06-22
 **Core Value:** KERNEL persists and acts on Pravin's behalf without clocking out — holding memory across sessions, running routines, and routing work to the right tool, always behind a safety gate that makes "got robbed by a poisoned email" structurally impossible.
 
-> Scope note: KERNEL's "user" is its owner, **Pravin**. Requirements are phrased as owner-facing or system capabilities. The build runs in 5 fixed phases (P0→P4). Per owner directive, **Phases 0–3 are built autonomously; Phase 4 (SAFE-full + MAINT) is GATED** — its requirements are in v1 scope but execution stops before it begins.
+> Scope note: KERNEL's "user" is its owner, **Pravin**. Requirements are phrased as owner-facing or system capabilities. The build runs in 5 fixed phases (spec P0→P4, GSD Phase 1→5). Per owner directive, **GSD Phases 1–4 (spec P0–P3) are built autonomously; GSD Phase 5 (spec P4: SAFE-full + MAINT) is GATED** — its requirements are in v1 scope but execution stops before it begins.
 
 ## v1 Requirements
 
-### Core / Daemon (CORE) — Phase 0
+### Core / Daemon (CORE) — Phase 1 (spec P0)
 
 - [ ] **CORE-01**: A TypeScript/Node daemon runs as a persistent process and survives across sessions (relaunched at login via launchd).
 - [ ] **CORE-02**: The daemon runs the core loop — perceive → recall → decide → act → log — as an event-driven runner (woken by input, launchd, or tool callbacks), falling genuinely idle when there is no work.
@@ -15,7 +15,7 @@
 - [ ] **CORE-04**: The daemon exposes a localhost IPC endpoint (Unix domain socket, NDJSON frames) for the Face to connect to.
 - [ ] **CORE-05**: All daemon activity is logged to an append-only event log under the memory repo.
 
-### Memory (MEM) — Phase 0 (base), Phase 4 (consolidation/prune)
+### Memory (MEM) — Phase 1 (base, spec P0), Phase 5 (consolidation/prune, spec P4)
 
 - [ ] **MEM-01**: Memory lives as Markdown + YAML front-matter in a dedicated git repo (`kernel-memory/`) with the spec's directory layout (IDENTITY, working-memory, knowledge, tasks, projects, logs, self).
 - [ ] **MEM-02**: `IDENTITY.md` (persona + voice rules) is injected at the start of every session and is never auto-edited.
@@ -23,18 +23,18 @@
 - [ ] **MEM-04**: Relevant memory is retrieved by keyword (no embeddings) and reranked by an authority×recency signal.
 - [ ] **MEM-05**: Externally-sourced content (email/web) carries a `source:` provenance tag through the context layer and lands in a `working-memory/quarantine/` bucket; it is never auto-promoted to `knowledge/` or `IDENTITY.md`. *(P0 seam; promotion gate completes in P4.)*
 - [ ] **MEM-06**: The `kernel-memory/finance/` path is gitignored and excluded from any backup.
-- [ ] **MEM-07**: A nightly consolidation job distills logs → reflections and promotes durable facts → knowledge; a cleanup job prunes stale working-memory/logs. *(Phase 4.)*
+- [ ] **MEM-07**: A nightly consolidation job distills logs → reflections and promotes durable facts → knowledge; a cleanup job prunes stale working-memory/logs. *(Phase 5 / spec P4.)*
 
-### Brain (BRAIN) — Phase 0 (interface + stub), Phase 2 (impls)
+### Brain (BRAIN) — Phase 1 (interface + stub, spec P0), Phase 3 (impls, spec P2)
 
-- [ ] **BRAIN-01**: A `BrainProvider` interface — `reason(prompt, context) → { thought, action?, reply? }` — is defined in Phase 0, before any implementation.
+- [ ] **BRAIN-01**: A `BrainProvider` interface — `reason(prompt, context) → { thought, action?, reply? }` — is defined in Phase 1, before any implementation.
 - [ ] **BRAIN-02**: `ClaudeBrain` (Anthropic API, `claude-opus-4-8`) is the default brain for hard planning, recovery, and judgment.
 - [ ] **BRAIN-03**: `LocalBrain` POSTs to Ollama `/api/chat` (`qwen2.5:7b-instruct-q4_K_M`) and is selectable from Settings (`brain = cloud | local`); the UI surfaces that local is private/free but visibly weaker on 16GB.
 - [ ] **BRAIN-04**: A `ClaudeCodeBrain` routes code-heavy reasoning to Claude Code headless.
 - [ ] **BRAIN-05**: The local 7B always runs as the cheap high-frequency helper (triage, classification, short narration) regardless of the selected brain.
 - [ ] **BRAIN-06**: The brain's tool loop is manual (decision → safety gate → execution), never an auto-runner that bypasses the gate.
 
-### Hands — GUI & Browser & Routing (HANDS) — Phase 1
+### Hands — GUI & Browser & Routing (HANDS) — Phase 2 (spec P1)
 
 - [ ] **HANDS-01**: A Peekaboo MCP tool lets KERNEL capture the screen, click, type, and drive GUI-only apps and menus.
 - [ ] **HANDS-02**: KERNEL can open and drive Mail through Peekaboo.
@@ -42,14 +42,14 @@
 - [ ] **HANDS-04**: A tool router registers tools (Claude Code, Peekaboo, Playwright, local 7B, mail, weather, finance) and dispatches calls to them.
 - [ ] **HANDS-05**: Every tool dispatch routes through a single `gate.authorize(call)` chokepoint (thin tier-classifier in P1; full gate in P4) — no tool self-classifies its tier and no path bypasses the chokepoint.
 
-### Voice (VOICE) — Phase 2
+### Voice (VOICE) — Phase 3 (spec P2)
 
 - [ ] **VOICE-01**: whisper.cpp runs as a subprocess (Core ML/ANE build); mic audio is piped in and a transcript is read out (STT).
 - [ ] **VOICE-02**: Pravin can speak to KERNEL and it reasons and responds.
 - [ ] **VOICE-03**: TTS uses AVSpeechSynthesizer; the `willSpeakRangeOfSpeechString` delegate emits word/segment boundaries that drive on-screen choreography.
 - [ ] **VOICE-04**: The Stage controller supports both word-level (callback-driven) and sentence-level (time-based) pacing so choreography survives flaky boundary callbacks.
 
-### The Cloud — Face / UI (CLOUD) — Phase 2
+### The Cloud — Face / UI (CLOUD) — Phase 3 (spec P2)
 
 - [ ] **CLOUD-01**: A native SwiftUI menubar app launches at login (MenuBarExtra + SMAppService) and connects to the daemon over the localhost socket.
 - [ ] **CLOUD-02**: A deep spatial-black canvas renders a real GPU particle cloud (Metal compute-shader particles) that drifts when idle.
@@ -58,7 +58,7 @@
 - [ ] **CLOUD-05**: The cloud has two states: full-screen when speaking/at boot, and a shrunk top-left corner pill during a Claude Code session.
 - [ ] **CLOUD-06**: The design language holds — shadcn-grade dark restraint, hairline borders, SF Pro, tabular numerals for money, spring motion (nothing snaps), one accent only.
 
-### Routines / Morning Brief (ROUT) — Phase 3
+### Routines / Morning Brief (ROUT) — Phase 4 (spec P3)
 
 - [ ] **ROUT-01**: The morning brief is a config file (`routines/morning-brief.yaml`), not hardcoded; each step is a module with `enabled`, `order`, `params`, `tier`.
 - [ ] **ROUT-02**: Presets Workday / Weekend / Travel are supported and switchable.
@@ -66,7 +66,7 @@
 - [ ] **ROUT-04**: Mail triage uses the local 7B to tag messages (log / reply / open / archive).
 - [ ] **ROUT-05**: Calendar reads via EventKit; invitations that accept/propose write a reply (Yellow tier).
 
-### Email Reply Flow (MAIL) — Phase 3
+### Email Reply Flow (MAIL) — Phase 4 (spec P3)
 
 - [ ] **MAIL-01**: On "reply", KERNEL asks Pravin for one-line intent, then rewrites it into Pravin's email voice using a ~200-token voice profile distilled once from real sent mail (greeting, sign-off, sentence length, formality range, emoji y/n), always injected.
 - [ ] **MAIL-02**: Few-shot retrieval pulls 2–3 of Pravin's past emails most similar to the recipient as live examples.
@@ -74,7 +74,7 @@
 - [ ] **MAIL-04**: A preview card (To / Subject / body / signature) is rendered; nothing sends without an explicit "Send it?" confirmation (Yellow-tier gate).
 - [ ] **MAIL-05**: KERNEL never auto-sends and never sends to an address that came from external content without showing it; on send it dispatches via Mail/Gmail, marks the source read, and logs.
 
-### Finance (FIN) — Phase 3
+### Finance (FIN) — Phase 4 (spec P3)
 
 - [ ] **FIN-01**: Financial data is accessed only via a read-only aggregation API (Plaid-style OAuth); Pravin authorizes once in the bank's own flow and KERNEL receives read-only tokens.
 - [ ] **FIN-02**: KERNEL never types banking credentials/card numbers into any field (hard rule).
@@ -82,14 +82,14 @@
 - [ ] **FIN-04**: Finance-leak prevention has all four layers verified passing before any backup job exists: broad gitignore, a pre-push hook scanning staged bytes, at-rest encryption, and a startup `git ls-files` assertion. *(P3 acceptance criterion — gates P4 backup.)*
 - [ ] **FIN-05**: Spending charts render with W/M/Y switchable timeframes, computed locally from aggregated transactions.
 
-### Claude Code Bridge (CC) — Phase 3
+### Claude Code Bridge (CC) — Phase 4 (spec P3)
 
 - [ ] **CC-01**: KERNEL authors prompts to Claude Code in first person, as Pravin — personal, direct register.
 - [ ] **CC-02**: A transparency corner-pill shows a live, scrollable transcript of Kernel ↔ Claude; Pravin can read along, interject, or pause.
 - [ ] **CC-03**: Any Claude Code action that hits Red tier routes through KERNEL's circuit breaker and does not auto-run mid-session. *(Chokepoint respected in P3; breaker enabled in P4.)*
 - [ ] **CC-04**: Every Claude Code project is written to `projects/registry.md` so KERNEL resumes cold across sessions.
 
-### Safety — Tiered Autonomy & Circuit Breaker (SAFE) — Phase 1 (chokepoint), Phase 4 (full) — GATED
+### Safety — Tiered Autonomy & Circuit Breaker (SAFE) — Phase 2 (chokepoint, spec P1), Phase 5 (full, spec P4) — GATED
 
 - [ ] **SAFE-01**: Actions are classified into tiers — 🟢 Green (reversible), 🟡 Yellow (recoverable), 🔴 Red (irreversible/financial).
 - [ ] **SAFE-02**: `/override` (typed or voice) unlocks autonomy: Green runs at full speed, Yellow proceeds + logs + briefly notifies.
@@ -97,15 +97,15 @@
 - [ ] **SAFE-04**: Hard non-overridable rules hold: no entering credentials/passwords/cards/SSN (escalate); no Red action whose instruction originated in external content (quarantine + escalate); a user-set daily spend ceiling forces escalation when exceeded.
 - [ ] **SAFE-05**: Red-tier gating applies inside Claude Code sessions too (re-submission shim re-enters the same breaker).
 - [ ] **SAFE-06**: The obstacle planner runs the ladder — try → replan → decompose → retry-with-backoff → escalate with a SPECIFIC recommendation ("X blocked by Y; I recommend Z. Approve?") — never a vague "I'm stuck"; only Red-tier gates skip the ladder and escalate immediately.
-- [ ] **SAFE-07**: `/override` and the Red tier are not enabled until Phase 4 is built and tested.
+- [ ] **SAFE-07**: `/override` and the Red tier are not enabled until Phase 5 (spec P4) is built and tested.
 
-### Self-Maintenance (MAINT) — Phase 4 — GATED
+### Self-Maintenance (MAINT) — Phase 5 (spec P4) — GATED
 
 - [ ] **MAINT-01**: A nightly launchd job commits and pushes the memory repo to a private GitHub backup (never including `finance/`).
 - [ ] **MAINT-02**: KERNEL maintains `self/changelog.md` and `self/metrics.md`.
 - [ ] **MAINT-03**: The maintenance jobs (consolidation, cleanup, backup) run on schedule via launchd.
 
-### Persona & Voice (PERS) — Phase 0 (IDENTITY), refined through P3
+### Persona & Voice (PERS) — Phase 1 (IDENTITY, spec P0), refined through Phase 4 (spec P3)
 
 - [ ] **PERS-01**: To Pravin, KERNEL is direct, terse, reporting-style — no bargaining once a task is stated; only vital details in notifications.
 - [ ] **PERS-02**: For outward content, register is dynamic — warm for personal email, sharp for posts, formal for docs.
@@ -134,28 +134,30 @@
 | Typing banking/credential/card/SSN into fields | Hard safety rule, never overridable; finance is read-only aggregation only |
 | Embeddings-first memory retrieval | Costs RAM the 16GB machine doesn't have; keyword first |
 | Static dashboard / grid-of-cards UI | Explicitly discarded; the interface is a living cloud choreographing widgets to speech |
-| Enabling `/override` / Red tier before Phase 4 | Safety: autonomy isn't safe until the gate + breaker are built and tested |
+| Enabling `/override` / Red tier before Phase 5 (spec P4) | Safety: autonomy isn't safe until the gate + breaker are built and tested |
 | Auto-promoting externally-sourced memory writes | Memory poisoning — turns a one-shot injection into a permanent backdoor |
 
 ## Traceability
 
+GSD phases are 1-indexed; the spec (§16) is 0-indexed. The mapping is one GSD phase per spec phase: GSD Phase 1 = spec P0, Phase 2 = spec P1, Phase 3 = spec P2, Phase 4 = spec P3, Phase 5 = spec P4.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01..05 | Phase 0 | Pending |
-| MEM-01..06 | Phase 0 | Pending |
-| MEM-07 | Phase 4 (gated) | Pending |
-| BRAIN-01 | Phase 0 | Pending |
-| BRAIN-02..06 | Phase 2 | Pending |
-| PERS-01..03 | Phase 0 | Pending |
-| HANDS-01..05 | Phase 1 | Pending |
-| VOICE-01..04 | Phase 2 | Pending |
-| CLOUD-01..06 | Phase 2 | Pending |
-| ROUT-01..05 | Phase 3 | Pending |
-| MAIL-01..05 | Phase 3 | Pending |
-| FIN-01..05 | Phase 3 | Pending |
-| CC-01..04 | Phase 3 | Pending |
-| SAFE-01..07 | Phase 4 (gated; chokepoint in P1) | Pending |
-| MAINT-01..03 | Phase 4 (gated) | Pending |
+| CORE-01..05 | Phase 1 (spec P0) | Pending |
+| MEM-01..06 | Phase 1 (spec P0) | Pending |
+| MEM-07 | Phase 5 (spec P4; gated) | Pending |
+| BRAIN-01 | Phase 1 (spec P0) | Pending |
+| BRAIN-02..06 | Phase 3 (spec P2) | Pending |
+| PERS-01..03 | Phase 1 (spec P0; refined through Phase 4) | Pending |
+| HANDS-01..05 | Phase 2 (spec P1) | Pending |
+| VOICE-01..04 | Phase 3 (spec P2) | Pending |
+| CLOUD-01..06 | Phase 3 (spec P2) | Pending |
+| ROUT-01..05 | Phase 4 (spec P3) | Pending |
+| MAIL-01..05 | Phase 4 (spec P3) | Pending |
+| FIN-01..05 | Phase 4 (spec P3) | Pending |
+| CC-01..04 | Phase 4 (spec P3) | Pending |
+| SAFE-01..07 | Phase 5 (spec P4; gated; chokepoint lands Phase 2) | Pending |
+| MAINT-01..03 | Phase 5 (spec P4; gated) | Pending |
 
 **Coverage:**
 - v1 requirements: 53 total across 13 categories
@@ -164,4 +166,4 @@
 
 ---
 *Requirements defined: 2026-06-22*
-*Last updated: 2026-06-22 after initialization*
+*Last updated: 2026-06-22 after roadmap creation (traceability re-mapped to GSD 1-indexed phases)*
