@@ -18,6 +18,9 @@ import { logger } from './memory/log.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import { startIpcServer } from './ipc/server.js';
 import { runHeartbeat } from './heartbeat.js';
+import { runConsolidation } from './memory/consolidate.js';
+import { runCleanup } from './memory/prune.js';
+import { runBackup } from './memory/backup.js';
 import { assertFinanceNotTracked as leakguardAssert } from './safety/leakguard.js';
 
 /**
@@ -55,6 +58,21 @@ export function runStartupGuards(memoryDir: string = config.memoryDir): void {
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   if (argv.includes('--heartbeat')) {
     await runHeartbeat();
+    process.exit(0);
+  }
+
+  // Short-lived self-maintenance job modes (MAINT-03) — each runs the job and exits, exactly
+  // like --heartbeat. The default resident mode below is untouched (SAFE-07 behavior-preserving).
+  if (argv.includes('--consolidate')) {
+    await runConsolidation();
+    process.exit(0);
+  }
+  if (argv.includes('--cleanup')) {
+    await runCleanup();
+    process.exit(0);
+  }
+  if (argv.includes('--backup')) {
+    await runBackup();
     process.exit(0);
   }
 
