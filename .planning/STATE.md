@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-06-22T09:33:28.834Z"
+status: verifying
+last_updated: "2026-06-22T10:07:08.402Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
   percent: 20
 ---
 
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-06-22)
 
 Phase: 1 of 5 (Skeleton — spec Phase 0)
 Plan: 3 of 3 in current phase
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 | Phase 01 P01 | 6 min | 4 tasks | 20 files |
 | Phase 01-skeleton P02 | 5min | 3 tasks | 8 files |
 | Phase 01-skeleton P03 | 11 min | 4 tasks | 15 files |
+| Phase 02-hands P01 | 12 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,7 @@ Recent decisions affecting current work:
 - [Phase 01-skeleton]: Loop never imports the IPC server: replies surface via an intent.reply callback the server supplies (server->loop via enqueue only, no cycle)
 - [Phase 01-skeleton]: drain() returns the in-flight promise when a pass is running (callers await completion) rather than returning early — keeps the single-pass guard while giving deterministic tick semantics
 - [Phase 01-skeleton]: Heartbeat launchd job hangs in node startup on this machine (node-under-launchd quirk, not a code defect); heartbeat write path verified under a launchd-identical env — recorded as a documented manual owner check
+- [Phase 02-hands]: Red-tier in Phase 2 = deny + escalate (LOCKED); the gated Verdict arm is reserved so Phase 5 only edits gate.authorize internals, never the router/tools/loop — No Red autonomy before the Phase-5 breaker; single-chokepoint dispatch with central tier classification and a hard credential fence
 
 ### Pending Todos
 
@@ -100,6 +102,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T09:33:11.969Z
-Stopped at: ROADMAP.md and STATE.md created; REQUIREMENTS.md traceability confirmed (53/53 mapped). Ready to plan Phase 1.
+Last session: 2026-06-22T10:07:08.396Z
+Stopped at: Completed 02-hands-01-PLAN.md
 Resume file: None

@@ -39,8 +39,8 @@
 - [ ] **HANDS-01**: A Peekaboo MCP tool lets KERNEL capture the screen, click, type, and drive GUI-only apps and menus.
 - [ ] **HANDS-02**: KERNEL can open and drive Mail through Peekaboo.
 - [ ] **HANDS-03**: A Playwright (headful) browser tool, using a dedicated persistent profile, can log in, scrape, and fill forms end-to-end.
-- [ ] **HANDS-04**: A tool router registers tools (Claude Code, Peekaboo, Playwright, local 7B, mail, weather, finance) and dispatches calls to them.
-- [ ] **HANDS-05**: Every tool dispatch routes through a single `gate.authorize(call)` chokepoint (thin tier-classifier in P1; full gate in P4) — no tool self-classifies its tier and no path bypasses the chokepoint.
+- [x] **HANDS-04**: A tool router registers tools (Claude Code, Peekaboo, Playwright, local 7B, mail, weather, finance) and dispatches calls to them.
+- [x] **HANDS-05**: Every tool dispatch routes through a single `gate.authorize(call)` chokepoint (thin tier-classifier in P1; full gate in P4) — no tool self-classifies its tier and no path bypasses the chokepoint.
 
 ### Voice (VOICE) — Phase 3 (spec P2)
 
@@ -91,7 +91,7 @@
 
 ### Safety — Tiered Autonomy & Circuit Breaker (SAFE) — Phase 2 (chokepoint, spec P1), Phase 5 (full, spec P4) — GATED
 
-- [ ] **SAFE-01**: Actions are classified into tiers — 🟢 Green (reversible), 🟡 Yellow (recoverable), 🔴 Red (irreversible/financial).
+- [x] **SAFE-01**: Actions are classified into tiers — 🟢 Green (reversible), 🟡 Yellow (recoverable), 🔴 Red (irreversible/financial).
 - [ ] **SAFE-02**: `/override` (typed or voice) unlocks autonomy: Green runs at full speed, Yellow proceeds + logs + briefly notifies.
 - [ ] **SAFE-03**: Red tier is always gated even under `/override`: dry-run preview → 10-second cancel window → spend-ceiling check → audit log, with no race on the spend counter.
 - [ ] **SAFE-04**: Hard non-overridable rules hold: no entering credentials/passwords/cards/SSN (escalate); no Red action whose instruction originated in external content (quarantine + escalate); a user-set daily spend ceiling forces escalation when exceeded.

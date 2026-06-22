@@ -50,7 +50,7 @@ Plans:
   5. The Peekaboo type-tool detects secure fields (password/card/cvv/ssn labels, autocomplete hints, secure text fields) and refuses to type secrets, returning an escalation — the credential-entry fence lands here because the physical capability to type secrets lands here (HANDS-01, HANDS-05).
 **Plans**: 3 plans
 Plans:
-- [ ] 02-01-PLAN.md — Foundation (wave 1): Tool contract + router + classify-only `gate.authorize` chokepoint + tier classifier + credential-fence detector + wire the loop's act seam; Red = deny + escalate (LOCKED), Verdict shape Phase-5-ready (HANDS-04, HANDS-05, SAFE-01 seed)
+- [x] 02-01-PLAN.md — Foundation (wave 1): Tool contract + router + classify-only `gate.authorize` chokepoint + tier classifier + credential-fence detector + wire the loop's act seam; Red = deny + escalate (LOCKED), Verdict shape Phase-5-ready (HANDS-04, HANDS-05, SAFE-01 seed)
 - [ ] 02-02-PLAN.md — Peekaboo MCP adapter (wave 2): persistent MCP client over StdioClientTransport, runtime tool discovery, capture/click/type/menu + open-Mail ops, AX secure-field signals into the fence, registered into the router (HANDS-01, HANDS-02, HANDS-05)
 - [ ] 02-03-PLAN.md — Playwright headful browser tool (wave 2): dedicated persistent profile (never real Chrome), navigate/scrape/fill with full-URL+provenance logging, DOM credential signals into the fence, `file://` fixture unit tests, registered into the router (HANDS-03, HANDS-05)
 
