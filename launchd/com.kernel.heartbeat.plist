@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  KERNEL heartbeat timed job (CORE-03).
+
+  StartCalendarInterval wakes a SHORT-LIVED `node dist/index.js --heartbeat` that appends
+  one dated `heartbeat {ISO}` line to kernel-memory/logs/{today}.md and exits. This proves
+  the scheduled-wake path writes to the append-only log. If the Mac was asleep at the
+  scheduled time, launchd runs the job at the next wake.
+
+  The cadence below is top-of-every-hour (Minute = 0) — owner-tunable. For a daily morning
+  beat instead, use <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>.
+
+  BEFORE LOADING: replace the node path + the two /ABSOLUTE/PATH/... values (see
+  launchd/README.md). node is NOT on launchd's minimal PATH — the absolute path is required.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.kernel.heartbeat</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/ABSOLUTE/PATH/TO/node</string>
+    <string>/ABSOLUTE/PATH/TO/KernelAi/daemon/dist/index.js</string>
+    <string>--heartbeat</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin</string>
+    <key>KERNEL_MEMORY_DIR</key>
+    <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory</string>
+  </dict>
+
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/heartbeat.err.log</string>
+</dict>
+</plist>
