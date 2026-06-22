@@ -39,6 +39,10 @@ const GREEN_OPS = new Set<string>([
   'press',
   'hotkey',
   'scroll',
+  // Finance read ops (FIN-01) — read-only aggregation; reversible, no world change.
+  'balances',
+  'transactions',
+  'aggregate',
 ]);
 
 /** Recoverable ops (a lasting but reversible change): label `yellow`. */
