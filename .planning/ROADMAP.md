@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Skeleton** - Persistent TypeScript daemon, markdown memory injection, BrainProvider swap-seam, launchd heartbeat, provenance/quarantine seam (spec Phase 0) (completed 2026-06-22)
 - [x] **Phase 2: Hands** - Peekaboo MCP + Playwright headful browser + tool router behind a single `gate.authorize` chokepoint with a thin tier-classifier (spec Phase 1) (completed 2026-06-22)
 - [x] **Phase 3: Brain + Voice + the Cloud** - Pluggable cloud/local brain, whisper STT, AVSpeechSynthesizer TTS with boundary callbacks, Metal particle cloud, Stage controller choreographing widgets to speech (spec Phase 2) (completed 2026-06-22)
-- [ ] **Phase 4: Routines + Claude Code + Finance** - Morning-brief engine, email reply flow, finance aggregation + encrypted store + 4-layer leak prevention, Claude Code bridge (spec Phase 3)
+- [x] **Phase 4: Routines + Claude Code + Finance** - Morning-brief engine, email reply flow, finance aggregation + encrypted store + 4-layer leak prevention, Claude Code bridge (spec Phase 3) (completed 2026-06-22)
 - [ ] **Phase 5: Safety + Self-Maintenance** - GATED: tiered gate + `/override` + circuit breaker, nightly consolidation/cleanup/backup, self changelog + metrics (spec Phase 4)
 
 ## Phase Details
@@ -117,5 +117,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (Phase 5 GATED — re
 | 1. Skeleton (spec P0) | 3/3 | Complete   | 2026-06-22 |
 | 2. Hands (spec P1) | 3/3 | Complete   | 2026-06-22 |
 | 3. Brain + Voice + the Cloud (spec P2) | 4/4 | Complete   | 2026-06-22 |
-| 4. Routines + Claude Code + Finance (spec P3) | 1/4 | In Progress|  |
+| 4. Routines + Claude Code + Finance (spec P3) | 4/4 | Complete   | 2026-06-22 |
 | 5. Safety + Self-Maintenance (spec P4) [GATED] | 0/TBD | Gated — owner approval required | - |
