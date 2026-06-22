@@ -1,0 +1,28 @@
+<!doctype html>
+<!--
+  login-form.html — a self-contained file://-loadable fixture for the browser tool unit lane
+  (HANDS-03 + HANDS-05, RESEARCH.md Wave 0). No external assets, no network — loads over file://.
+
+  It carries:
+    - a labelled Email field   (type=email,    autocomplete=email)        → a NON-secret field; fill is allowed
+    - a labelled Password field (type=password, autocomplete=current-password) → a SECRET field; the fence DENIES
+    - a scrapeable heading text node ("Sign in to Example") for the external-tagging test
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>KERNEL fixture — login</title>
+  </head>
+  <body>
+    <h1>Sign in to Example</h1>
+    <form>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" />
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" />
+
+      <button type="submit">Sign in</button>
+    </form>
+  </body>
+</html>

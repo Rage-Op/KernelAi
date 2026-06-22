@@ -87,6 +87,12 @@ export function __setContextForTest(mock: BrowserContext | null): void {
   ctx = mock;
 }
 
+/** TEST-ONLY seam: expose the single live page so a test can read an input's value (role/label),
+ *  asserting "filled / not filled" from the live DOM without re-implementing locator logic. */
+export async function __getPageForTest(): Promise<Page> {
+  return page();
+}
+
 /** TEST-ONLY: close + clear the cached context between test files so each starts clean. */
 export async function __resetForTest(): Promise<void> {
   if (ctx) {
