@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-last_updated: "2026-06-22T11:24:55.047Z"
+last_updated: "2026-06-22T11:36:45.038Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 40
 ---
 
@@ -29,7 +29,7 @@ Plan: 3 of 3 in current phase
 Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [████████░░] 80%
 | Phase 02-hands P03 | ~14 min | 3 tasks | 7 files |
 | Phase 03 P01 | 19 min | 3 tasks | 18 files |
 | Phase 03-brain-voice-the-cloud P02 | 10 min | 2 tasks | 4 files |
+| Phase 03-brain-voice-the-cloud P03 | 10 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 02-hands]: Added an OPTIONAL Tool.surfaceSignals pre-authorize hook (run by registry.dispatch BEFORE the gate) so the browser fill op surfaces live DOM secure-field signals (type/autocomplete/label) into ToolCall.args for the credential fence — the fence can refuse a password field before .fill() without bypassing the single dispatch chokepoint; backward-compatible (Peekaboo/stub omit it) — HANDS-05 for the browser needs the fence to classify live-DOM signals only the adapter can read, and that read must precede gate.authorize
 - [Phase 03]: ClaudeCodeBrain uses zero-dep node:child_process (not execa) — Avoids a new dependency and its slopcheck/legitimacy checkpoint (T-03-SC); the claude -p JSON contract is stable
 - [Phase 03]: ClaudeCodeBrain fenced Green/Yellow-only (--permission-mode dontAsk + --allowedTools Read) — BRAIN-04/T-03-05: no ambient money/irreversible rights this phase; Red re-submission shim deferred to Phase 4 (CC-03)
+- [Phase 03]: Face is an Xcode project (NOT pure SwiftPM) maintained via XcodeGen (face/project.yml); committed .xcodeproj is the reproducible source of truth — TCC permanence needs Info.plist/entitlements + a stable signed identity (Pitfall 4); hand-writing a .pbxproj is fragile
+- [Phase 03]: Boundary spike verdict on macOS 26.5 + Samantha: willSpeakRangeOfSpeechString callbacks FIRE and ranges are accurate including on numbers (2020 did NOT drift); word-level pacing is PRIMARY-viable, sentence-time fallback ships anyway (VOICE-04) — ROADMAP criterion 2 mandates the on-device spike precede the Stage; recorded in face/SPIKE-VERDICT.md which gates 03-04
+- [Phase 03]: Automated xcodebuild gate runs CODE_SIGNING_ALLOWED=NO (no signing identity in the build env); owner's signed local build supplies the stable Developer-ID identity — security find-identity reports 0 identities; bundle id com.kernel.face stays stable regardless, which is the Pitfall-4-relevant part
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T11:24:50.113Z
-Stopped at: Completed 02-hands-03-PLAN.md
+Last session: 2026-06-22T11:36:45.032Z
+Stopped at: Completed 03-brain-voice-the-cloud-03-PLAN.md
 Resume file: None

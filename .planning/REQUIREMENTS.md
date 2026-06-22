@@ -46,7 +46,7 @@
 
 - [x] **VOICE-01**: whisper.cpp runs as a subprocess (Core ML/ANE build); mic audio is piped in and a transcript is read out (STT).
 - [x] **VOICE-02**: Pravin can speak to KERNEL and it reasons and responds.
-- [ ] **VOICE-03**: TTS uses AVSpeechSynthesizer; the `willSpeakRangeOfSpeechString` delegate emits word/segment boundaries that drive on-screen choreography.
+- [x] **VOICE-03**: TTS uses AVSpeechSynthesizer; the `willSpeakRangeOfSpeechString` delegate emits word/segment boundaries that drive on-screen choreography.
 - [ ] **VOICE-04**: The Stage controller supports both word-level (callback-driven) and sentence-level (time-based) pacing so choreography survives flaky boundary callbacks.
 
 ### The Cloud — Face / UI (CLOUD) — Phase 3 (spec P2)
