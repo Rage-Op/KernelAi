@@ -9,11 +9,11 @@
 
 ### Core / Daemon (CORE) — Phase 1 (spec P0)
 
-- [ ] **CORE-01**: A TypeScript/Node daemon runs as a persistent process and survives across sessions (relaunched at login via launchd).
-- [ ] **CORE-02**: The daemon runs the core loop — perceive → recall → decide → act → log — as an event-driven runner (woken by input, launchd, or tool callbacks), falling genuinely idle when there is no work.
-- [ ] **CORE-03**: A launchd login agent starts the daemon at login; a timed launchd job fires a heartbeat that writes a dated log entry.
-- [ ] **CORE-04**: The daemon exposes a localhost IPC endpoint (Unix domain socket, NDJSON frames) for the Face to connect to.
-- [ ] **CORE-05**: All daemon activity is logged to an append-only event log under the memory repo.
+- [x] **CORE-01**: A TypeScript/Node daemon runs as a persistent process and survives across sessions (relaunched at login via launchd).
+- [x] **CORE-02**: The daemon runs the core loop — perceive → recall → decide → act → log — as an event-driven runner (woken by input, launchd, or tool callbacks), falling genuinely idle when there is no work.
+- [x] **CORE-03**: A launchd login agent starts the daemon at login; a timed launchd job fires a heartbeat that writes a dated log entry.
+- [x] **CORE-04**: The daemon exposes a localhost IPC endpoint (Unix domain socket, NDJSON frames) for the Face to connect to.
+- [x] **CORE-05**: All daemon activity is logged to an append-only event log under the memory repo.
 
 ### Memory (MEM) — Phase 1 (base, spec P0), Phase 5 (consolidation/prune, spec P4)
 

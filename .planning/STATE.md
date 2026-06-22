@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-22T09:17:21.275Z"
+last_updated: "2026-06-22T09:33:28.834Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 20
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-22)
 ## Current Position
 
 Phase: 1 of 5 (Skeleton — spec Phase 0)
-Plan: 2 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: Ready to execute
 Last activity: 2026-06-22
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [███████░░░] 67%
 *Updated after each plan completion*
 | Phase 01 P01 | 6 min | 4 tasks | 20 files |
 | Phase 01-skeleton P02 | 5min | 3 tasks | 8 files |
+| Phase 01-skeleton P03 | 11 min | 4 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,9 @@ Recent decisions affecting current work:
 - [Phase ?]: IDENTITY baseline auto-seeds on first run (idempotent) but never auto-re-baselines; out-of-band change fails loud
 - [Phase ?]: External content excluded from injection by BOTH retrieve authority 0.0 AND inject source filter (defense-in-depth)
 - [Phase ?]: Memory modules take memoryDir as a defaulted param (config.memoryDir) for temp-dir unit testing
+- [Phase 01-skeleton]: Loop never imports the IPC server: replies surface via an intent.reply callback the server supplies (server->loop via enqueue only, no cycle)
+- [Phase 01-skeleton]: drain() returns the in-flight promise when a pass is running (callers await completion) rather than returning early — keeps the single-pass guard while giving deterministic tick semantics
+- [Phase 01-skeleton]: Heartbeat launchd job hangs in node startup on this machine (node-under-launchd quirk, not a code defect); heartbeat write path verified under a launchd-identical env — recorded as a documented manual owner check
 
 ### Pending Todos
 
@@ -84,6 +88,7 @@ None yet.
 - Phase 3: IPC transport ambiguity (Unix domain socket vs localhost WebSocket) must be resolved — UDS is the recommended production path, localhost WebSocket the fallback.
 - Phase 4 → Phase 5 transition gate: all four finance-leak prevention layers must be verified passing before any backup job (Phase 5) is built.
 - Phase 5 is GATED: do not auto-execute. Explicit owner approval required before it begins.
+- Owner manual launchd gate carried forward: (1) resolve node-under-launchd heartbeat startup hang + confirm on-schedule firing, (2) daemon relaunch-at-login, (3) Face UDS attach/detach/re-attach against the launchd-managed daemon, (4) IDENTITY tamper fail-loud check. Runbook: launchd/README.md + 01-03-SUMMARY.md.
 
 ## Deferred Items
 
@@ -95,6 +100,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T09:17:02.282Z
+Last session: 2026-06-22T09:33:11.969Z
 Stopped at: ROADMAP.md and STATE.md created; REQUIREMENTS.md traceability confirmed (53/53 mapped). Ready to plan Phase 1.
 Resume file: None

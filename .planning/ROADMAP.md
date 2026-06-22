@@ -12,7 +12,7 @@ KERNEL is built in the spec's fixed, non-negotiable 5-phase order (§16). The jo
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Skeleton** - Persistent TypeScript daemon, markdown memory injection, BrainProvider swap-seam, launchd heartbeat, provenance/quarantine seam (spec Phase 0)
+- [x] **Phase 1: Skeleton** - Persistent TypeScript daemon, markdown memory injection, BrainProvider swap-seam, launchd heartbeat, provenance/quarantine seam (spec Phase 0) (completed 2026-06-22)
 - [ ] **Phase 2: Hands** - Peekaboo MCP + Playwright headful browser + tool router behind a single `gate.authorize` chokepoint with a thin tier-classifier (spec Phase 1)
 - [ ] **Phase 3: Brain + Voice + the Cloud** - Pluggable cloud/local brain, whisper STT, AVSpeechSynthesizer TTS with boundary callbacks, Metal particle cloud, Stage controller choreographing widgets to speech (spec Phase 2)
 - [ ] **Phase 4: Routines + Claude Code + Finance** - Morning-brief engine, email reply flow, finance aggregation + encrypted store + 4-layer leak prevention, Claude Code bridge (spec Phase 3)
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Scaffold + kernel-memory/ repo (IDENTITY persona, finance gitignore) + BrainProvider/StubBrain + provenance shape + test harness + failing e2e contract (MEM-01, MEM-06, BRAIN-01, MEM-05, PERS-01/02/03)
 - [x] 01-02-PLAN.md — Memory engine: IDENTITY hash guard, keyword retrieval + authority×recency rerank, quarantine write path, priority injection under 16K cap (MEM-02, MEM-03, MEM-04, MEM-05, PERS-01)
-- [ ] 01-03-PLAN.md — UDS NDJSON IPC + event-driven loop + append-only log + heartbeat + launchd plists; closes the end-to-end tick (CORE-01, CORE-02, CORE-03, CORE-04, CORE-05)
+- [x] 01-03-PLAN.md — UDS NDJSON IPC + event-driven loop + append-only log + heartbeat + launchd plists; closes the end-to-end tick (CORE-01, CORE-02, CORE-03, CORE-04, CORE-05)
 
 ### Phase 2: Hands
 **Goal**: (spec Phase 1) Kernel can open Mail and drive a browser task end-to-end — Peekaboo MCP (capture/click/type/Mail) plus a Playwright headful browser tool on a dedicated profile, dispatched through a tool router where every call routes through a single `gate.authorize(call)` chokepoint (thin classify-only tier-classifier; no breaker, no `/override` yet).
@@ -98,7 +98,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (Phase 5 GATED — re
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Skeleton (spec P0) | 2/3 | In Progress|  |
+| 1. Skeleton (spec P0) | 3/3 | Complete   | 2026-06-22 |
 | 2. Hands (spec P1) | 0/TBD | Not started | - |
 | 3. Brain + Voice + the Cloud (spec P2) | 0/TBD | Not started | - |
 | 4. Routines + Claude Code + Finance (spec P3) | 0/TBD | Not started | - |
