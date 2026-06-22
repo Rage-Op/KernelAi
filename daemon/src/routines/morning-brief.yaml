@@ -1,0 +1,99 @@
+# morning-brief.yaml — the owner-editable morning-brief routine config (ROUT-01/02).
+#
+# This file is the SOURCE OF TRUTH for the morning brief. The routine engine
+# (routines/engine.ts) parses it with `yaml`, zod-validates every step, then runs
+# the ENABLED steps in ascending `order` — one or two widgets at a time via the
+# shipped assembleSpeak (never a static grid, ROUT-03).
+#
+# Shape (spec §11 / 04-RESEARCH Code Examples):
+#   preset:  the ACTIVE preset name (Workday | Weekend | Travel) — the owner switches
+#            the whole brief by changing this single line (ROUT-02).
+#   presets: a map preset-name → list of step ids that preset turns on. A step also
+#            present in `steps` runs only when (a) enabled:true AND (b) its id is in
+#            the active preset's list. This keeps the per-step config in ONE place
+#            (steps) while letting a preset re-shape the brief without duplication.
+#   steps:   the full step catalogue. Each step: { id, order, enabled, tier, params? }.
+#            id ∈ the nine known step ids; order is a positive int; tier ∈ green|yellow|red.
+
+# The active preset (owner switches the brief here).
+preset: Workday
+
+# Which step ids each preset turns on. Workday = the full brief; Weekend trims the
+# work-centric steps (calendar/invitations/email_reply); Travel keeps travel-relevant
+# steps (calendar/invitations) and trims the desk-bound finance/mail depth.
+presets:
+  Workday:
+    - greeting
+    - weather
+    - calendar
+    - invitations
+    - mail_triage
+    - unread_announce
+    - email_reply
+    - balances
+    - spending
+  Weekend:
+    - greeting
+    - weather
+    - mail_triage
+    - unread_announce
+    - balances
+    - spending
+  Travel:
+    - greeting
+    - weather
+    - calendar
+    - invitations
+    - mail_triage
+    - unread_announce
+
+# The full step catalogue. Order is the serial run order; enabled gates a step out
+# entirely (even if a preset lists it). tier is the SAFETY tier the daemon gate uses
+# when this step emits an action (the step NEVER self-classifies — tiers.ts owns it).
+steps:
+  - id: greeting
+    order: 1
+    enabled: true
+    tier: green
+
+  - id: weather
+    order: 2
+    enabled: true
+    tier: green
+
+  - id: calendar
+    order: 3
+    enabled: true
+    tier: green
+
+  - id: invitations
+    order: 4
+    enabled: true
+    tier: yellow          # an invitation reply is a Yellow-tier write (ROUT-05)
+
+  - id: mail_triage
+    order: 5
+    enabled: true
+    tier: green           # triage only TAGS — it never auto-acts (ROUT-04, T-04-02)
+    params:
+      labels: [log, reply, open, archive]
+
+  - id: unread_announce
+    order: 6
+    enabled: true
+    tier: green
+
+  - id: email_reply
+    order: 7
+    enabled: true
+    tier: yellow          # a send is a Yellow-tier write (the gate lands in 04-02)
+
+  - id: balances
+    order: 8
+    enabled: true
+    tier: green           # read-only finance
+
+  - id: spending
+    order: 9
+    enabled: true
+    tier: green           # read-only finance
