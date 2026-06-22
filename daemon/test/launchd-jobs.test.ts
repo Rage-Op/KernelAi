@@ -1,10 +1,12 @@
 /**
  * launchd-jobs.test.ts (MAINT-03).
  *
- * Lints (NOT executes) the three maintenance plists: each must be valid plist XML, reference the
- * compiled `dist/index.js --<job>` ProgramArgument, and carry a StartCalendarInterval. We validate
- * with macOS `plutil -lint` (the canonical plist validator) AND assert the load-bearing content.
- * These plists are NEVER bootstrapped/loaded here — only parsed.
+ * Lints (NOT executes) the three maintenance plists: each must be valid plist XML, invoke the
+ * `kernel-launch.sh` wrapper with its `--<job>` ProgramArgument, and carry a StartCalendarInterval.
+ * (The wrapper sets a real env + detaches stdin + execs `dist/index.js` — direct `node dist/index.js`
+ * ProgramArguments hang under launchd's minimal env and are TCC-blocked under ~/Documents; the wrapper
+ * is the canonical, working invocation.) We validate with macOS `plutil -lint` (the canonical plist
+ * validator) AND assert the load-bearing content. These plists are NEVER bootstrapped/loaded here.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +27,7 @@ const JOBS: { file: string; flag: string; label: string }[] = [
 ];
 
 for (const job of JOBS) {
-  test(`${job.file}: valid plist XML referencing dist/index.js ${job.flag} with a StartCalendarInterval`, () => {
+  test(`${job.file}: valid plist XML invoking the kernel-launch.sh wrapper ${job.flag} with a StartCalendarInterval`, () => {
     const file = path.join(launchdDir(), job.file);
     assert.ok(fs.existsSync(file), `${file} must exist`);
 
@@ -33,11 +35,11 @@ for (const job of JOBS) {
     const lint = spawnSync('plutil', ['-lint', file], { encoding: 'utf8' });
     assert.equal(lint.status, 0, `plutil -lint must pass for ${job.file}: ${lint.stdout}${lint.stderr}`);
 
-    // (2) load-bearing content: the correct Label, the dist/index.js + --<job> ProgramArgument,
-    //     and a StartCalendarInterval key.
+    // (2) load-bearing content: the correct Label, the kernel-launch.sh wrapper + --<job>
+    //     ProgramArgument, and a StartCalendarInterval key.
     const xml = fs.readFileSync(file, 'utf8');
     assert.match(xml, new RegExp(`<string>${job.label}</string>`), 'correct Label');
-    assert.match(xml, /dist\/index\.js<\/string>/, 'invokes the compiled dist/index.js');
+    assert.match(xml, /kernel-launch\.sh<\/string>/, 'invokes the kernel-launch.sh wrapper');
     assert.match(xml, new RegExp(`<string>${job.flag}</string>`), `invokes ${job.flag}`);
     assert.match(xml, /<key>StartCalendarInterval<\/key>/, 'scheduled via StartCalendarInterval');
   });

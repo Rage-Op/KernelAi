@@ -1,5 +1,31 @@
 # launchd — KERNEL install / uninstall runbook
 
+> ## Install (current, wrapper-based — supersedes any older steps below)
+>
+> All five plists invoke **`kernel-launch.sh`** (a wrapper), not `node dist/index.js` directly.
+> Two hard-won reasons:
+> 1. **Never keep the code under `~/Documents` / `~/Desktop` / `~/Downloads`.** Those are TCC-protected;
+>    launchd-spawned jobs are denied read access and exit **126**. Keep the project at e.g. `~/KernelAi`.
+> 2. launchd gives jobs a minimal env (no `HOME`, bare `PATH`) and no terminal — `node` can hang in
+>    startup. The wrapper sets a real env, resolves node + the repo from its own location, and detaches
+>    stdin (`< /dev/null`).
+>
+> **Secrets:** create `~/.kernel.env` (chmod 600) with `export ANTHROPIC_API_KEY=...` (and any Plaid keys).
+> The wrapper sources it so the launchd-run daemon can reach the cloud brain / finance API. Never committed.
+>
+> **Install:**
+> ```sh
+> # 1. project lives OUTSIDE ~/Documents (e.g. ~/KernelAi); daemon built (npm --prefix daemon run build)
+> # 2. generate filled plists into ~/Library/LaunchAgents (replace __KERNEL_DIR__ with the repo path):
+> for p in launchd/com.kernel.*.plist; do
+>   sed "s#__KERNEL_DIR__#$PWD#g" "$p" > "$HOME/Library/LaunchAgents/$(basename "$p")"
+> done
+> # 3. bootstrap:
+> for j in daemon heartbeat consolidation cleanup backup; do
+>   launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.kernel.$j.plist"; done
+> ```
+> **Uninstall:** `for j in daemon heartbeat consolidation cleanup backup; do launchctl bootout gui/$(id -u)/com.kernel.$j 2>/dev/null; done`
+
 Five LaunchAgents run KERNEL under launchd (CORE-01, CORE-03, MEM-07, MAINT-01/03):
 
 | Plist | Job | Keys |

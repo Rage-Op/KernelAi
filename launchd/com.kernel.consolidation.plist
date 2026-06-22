@@ -1,52 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-  KERNEL nightly consolidation job (MEM-07 / MAINT-03).
-
-  StartCalendarInterval wakes a SHORT-LIVED `node dist/index.js --consolidate` that distills the
-  append-only daily logs into working-memory/reflections/ and promotes ONLY source:user/self
-  durable facts into knowledge/ (external-sourced facts are summarized for recall but NEVER
-  promoted, and IDENTITY.md is NEVER auto-edited). It runs and exits — like --heartbeat. If the
-  Mac was asleep at the scheduled time, launchd runs the job at the next wake.
-
-  Schedule: nightly at 03:00 (staggered before cleanup 03:30 and backup 04:00).
-
-  BEFORE LOADING: replace the node path + the two /ABSOLUTE/PATH/... values (see
-  launchd/README.md). node is NOT on launchd's minimal PATH — the absolute path is required.
--->
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>com.kernel.consolidation</string>
-
+  <key>Label</key><string>com.kernel.consolidation</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/ABSOLUTE/PATH/TO/node</string>
-    <string>/ABSOLUTE/PATH/TO/KernelAi/daemon/dist/index.js</string>
+    <string>__KERNEL_DIR__/launchd/kernel-launch.sh</string>
     <string>--consolidate</string>
   </array>
-
   <key>StartCalendarInterval</key>
-  <array>
-    <dict>
-      <key>Hour</key>
-      <integer>3</integer>
-      <key>Minute</key>
-      <integer>0</integer>
-    </dict>
-  </array>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/usr/local/bin:/usr/bin:/bin</string>
-    <key>KERNEL_MEMORY_DIR</key>
-    <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory</string>
-  </dict>
-
-  <key>StandardOutPath</key>
-  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/consolidation.out.log</string>
-  <key>StandardErrorPath</key>
-  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/consolidation.err.log</string>
+  <array><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict></array>
+  <key>StandardOutPath</key><string>__KERNEL_DIR__/kernel-memory/logs/consolidation.out.log</string>
+  <key>StandardErrorPath</key><string>__KERNEL_DIR__/kernel-memory/logs/consolidation.err.log</string>
 </dict>
 </plist>

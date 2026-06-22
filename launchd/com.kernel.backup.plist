@@ -1,60 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-  KERNEL nightly backup job (MAINT-01 / MAINT-03).
-
-  StartCalendarInterval wakes a SHORT-LIVED `node dist/index.js --backup` that stages the memory
-  repo with EXPLICIT paths only (never -A/-f/.), asserts finance/ is untracked (leakguard
-  ls-files layer d), verifies the pre-push hook AND a remote are present (else fails loud), then
-  commits + pushes to the owner's PRIVATE GitHub remote. finance/ bytes NEVER leave the machine.
-  It runs and exits — like --heartbeat. If the Mac was asleep, launchd runs it at the next wake.
-
-  Schedule: nightly at 04:00 (after consolidation 03:00 + cleanup 03:30, so the snapshot is fresh).
-
-  OWNER SETUP REQUIRED before this job can push (it fails loud until then — by design):
-    1. Create a PRIVATE GitHub repo and add it as the kernel-memory remote:
-         git -C kernel-memory remote add origin <private url>
-    2. Add an SSH deploy key with push access (GitHub repo -> Settings -> Deploy keys).
-    3. Install the pre-push hook:
-         cp daemon/scripts/hooks/kernel-memory-pre-push.sh kernel-memory/.git/hooks/pre-push
-         chmod +x kernel-memory/.git/hooks/pre-push
-
-  BEFORE LOADING: replace the node path + the two /ABSOLUTE/PATH/... values (see
-  launchd/README.md). node is NOT on launchd's minimal PATH — the absolute path is required.
--->
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>com.kernel.backup</string>
-
+  <key>Label</key><string>com.kernel.backup</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/ABSOLUTE/PATH/TO/node</string>
-    <string>/ABSOLUTE/PATH/TO/KernelAi/daemon/dist/index.js</string>
+    <string>__KERNEL_DIR__/launchd/kernel-launch.sh</string>
     <string>--backup</string>
   </array>
-
   <key>StartCalendarInterval</key>
-  <array>
-    <dict>
-      <key>Hour</key>
-      <integer>4</integer>
-      <key>Minute</key>
-      <integer>0</integer>
-    </dict>
-  </array>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/usr/local/bin:/usr/bin:/bin</string>
-    <key>KERNEL_MEMORY_DIR</key>
-    <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory</string>
-  </dict>
-
-  <key>StandardOutPath</key>
-  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/backup.out.log</string>
-  <key>StandardErrorPath</key>
-  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/backup.err.log</string>
+  <array><dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>0</integer></dict></array>
+  <key>StandardOutPath</key><string>__KERNEL_DIR__/kernel-memory/logs/backup.out.log</string>
+  <key>StandardErrorPath</key><string>__KERNEL_DIR__/kernel-memory/logs/backup.err.log</string>
 </dict>
 </plist>

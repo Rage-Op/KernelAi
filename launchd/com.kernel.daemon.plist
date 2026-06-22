@@ -1,47 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-  KERNEL daemon login agent (CORE-01).
-
-  RunAtLoad + KeepAlive = the daemon starts at login and is relaunched if it crashes
-  ("never clocks out"). launchd runs with a MINIMAL environment, so:
-    - ProgramArguments[0] MUST be the ABSOLUTE path to node (node is NOT on launchd's PATH).
-    - EnvironmentVariables.PATH is set explicitly; never assume a shell profile.
-    - KERNEL_MEMORY_DIR points the daemon at the kernel-memory/ git repo (ABSOLUTE).
-
-  BEFORE LOADING: replace every /ABSOLUTE/PATH/... and the node path below with the
-  real values (see launchd/README.md — `which node`, the real repo path). Then build
-  `cd daemon && npm run build` so dist/index.js exists, copy this file into
-  ~/Library/LaunchAgents/, and `launchctl bootstrap gui/$(id -u) ...` (NOT `load`).
--->
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>com.kernel.daemon</string>
-
+  <key>Label</key><string>com.kernel.daemon</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/ABSOLUTE/PATH/TO/node</string>
-    <string>/ABSOLUTE/PATH/TO/KernelAi/daemon/dist/index.js</string>
+    <string>__KERNEL_DIR__/launchd/kernel-launch.sh</string>
   </array>
-
-  <key>RunAtLoad</key>
-  <true/>
-
-  <key>KeepAlive</key>
-  <true/>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/usr/local/bin:/usr/bin:/bin</string>
-    <key>KERNEL_MEMORY_DIR</key>
-    <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory</string>
-  </dict>
-
-  <key>StandardOutPath</key>
-  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/daemon.out.log</string>
-  <key>StandardErrorPath</key>
-  <string>/ABSOLUTE/PATH/TO/KernelAi/kernel-memory/logs/daemon.err.log</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__KERNEL_DIR__/kernel-memory/logs/daemon.out.log</string>
+  <key>StandardErrorPath</key><string>__KERNEL_DIR__/kernel-memory/logs/daemon.err.log</string>
 </dict>
 </plist>
