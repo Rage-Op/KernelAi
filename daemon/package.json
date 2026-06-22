@@ -9,6 +9,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "heartbeat": "node dist/index.js --heartbeat",
+    "chat": "node scripts/chat.mjs",
     "test": "tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\""
   },
   "dependencies": {

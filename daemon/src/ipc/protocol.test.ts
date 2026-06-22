@@ -117,6 +117,60 @@ test('protocol: a malformed transcript frame is rejected', () => {
   );
 });
 
+// --- ADDITIVE arms — capabilities (on connect) + stats (per turn) ---
+
+test('protocol: a capabilities frame round-trips through FrameSchema', () => {
+  assert.equal(
+    FrameSchema.safeParse({
+      type: 'capabilities',
+      brain: 'local',
+      daemon: 'kernel',
+      version: '0.1.0',
+      injectCap: 16384,
+      tools: ['browser', 'finance', 'mail', 'peekaboo'],
+      integrations: ['Peekaboo', 'Playwright'],
+    }).success,
+    true,
+  );
+  // a non-enum brain is rejected
+  assert.equal(
+    FrameSchema.safeParse({ type: 'capabilities', brain: 'x', daemon: 'k', version: '1', injectCap: 1, tools: [], integrations: [] }).success,
+    false,
+  );
+  // missing tools array is rejected
+  assert.equal(
+    FrameSchema.safeParse({ type: 'capabilities', brain: 'local', daemon: 'k', version: '1', injectCap: 1, integrations: [] }).success,
+    false,
+  );
+});
+
+test('protocol: a stats frame round-trips; metric fields are optional', () => {
+  // a full local stats frame
+  assert.equal(
+    FrameSchema.safeParse({
+      type: 'stats',
+      id: 'u1',
+      brain: 'local',
+      model: 'qwen2.5:7b-instruct-q4_K_M',
+      promptTokens: 120,
+      outputTokens: 40,
+      tokensPerSec: 20,
+      evalMs: 2000,
+      loadMs: 0,
+      totalMs: 2600,
+      contextWindow: 8192,
+      estCostUsd: 0,
+    }).success,
+    true,
+  );
+  // a minimal stats frame (only id + brain) — all metrics omitted
+  assert.equal(FrameSchema.safeParse({ type: 'stats', id: 'u2', brain: 'cloud' }).success, true);
+  // missing id is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'stats', brain: 'local' }).success, false);
+  // a non-numeric token count is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'stats', id: 'u3', brain: 'local', outputTokens: 'lots' }).success, false);
+});
+
 test('protocol: a speak frame carrying cues[] + onFinish round-trips (the frozen SpeakSchema)', () => {
   const r = FrameSchema.safeParse({
     type: 'speak',

@@ -31,6 +31,19 @@ final class AppCoordinator: ObservableObject {
     /// Launch-at-login (SMAppService.mainApp), user-toggled, default off (CLOUD-01).
     @Published var launchAtLogin: Bool = false
 
+    /// The active brain shown in the menubar Settings toggle (CLOUD-01). Seeded from UserDefaults
+    /// so the visible choice survives Face restarts; the daemon persists its own copy (settings.ts)
+    /// so the active brain survives daemon restarts. Default `.cloud` (ClaudeBrain — BRAIN-02).
+    @Published var brain: Frame.Brain = AppCoordinator.loadBrainPreference()
+
+    /// UserDefaults key for the persisted brain selection (UI-side mirror of the daemon's brain.json).
+    private static let brainDefaultsKey = "kernel.brain"
+
+    /// Read the persisted UI brain choice, defaulting to `.cloud` when unset/invalid.
+    static func loadBrainPreference() -> Frame.Brain {
+        Frame.Brain(rawValue: UserDefaults.standard.string(forKey: brainDefaultsKey) ?? "") ?? .cloud
+    }
+
     init() {
         self.speaker = Speaker(stage: stage)
         self.mic = MicEngine(cloud: cloud)
@@ -254,6 +267,31 @@ final class AppCoordinator: ObservableObject {
 
     func refreshLaunchAtLogin() {
         launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    }
+
+    // MARK: Brain selection (CLOUD-01 Settings toggle)
+
+    /// Programmatic brain switch (also used by tests): update the published selection, then run the
+    /// side-effects. The menubar Picker does NOT call this — it drives `brain` through its
+    /// synthesized binding (`$coordinator.brain`) and runs the side-effects from `.onChange`, which
+    /// fires AFTER the view update so it never publishes from within a view update.
+    func setBrain(_ newBrain: Frame.Brain) {
+        guard newBrain != brain else { return }
+        brain = newBrain
+        persistAndSendBrain(newBrain)
+    }
+
+    /// Persist the UI choice (UserDefaults) and emit the `settings` frame so the daemon swaps the
+    /// active BrainProvider (cloud→ClaudeBrain, local→LocalBrain) and persists its own copy. Does
+    /// NOT mutate `brain` — the binding owns that. The Face NEVER runs a model; it only asks the
+    /// daemon to switch.
+    func persistAndSendBrain(_ newBrain: Frame.Brain) {
+        UserDefaults.standard.set(newBrain.rawValue, forKey: Self.brainDefaultsKey)
+        guard !Self.isUnderXCTest else {
+            log.info("under XCTest host — not sending settings brain=\(newBrain.rawValue, privacy: .public)")
+            return
+        }
+        socket.send(.settings(brain: newBrain))
     }
 
     /// Toggle launch-at-login. User-driven, default off; failures are logged, not fatal.

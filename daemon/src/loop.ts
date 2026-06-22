@@ -16,7 +16,7 @@
  * that pushes a `reply` frame back to the originating connection), so the loop never imports
  * the server — no cycle.
  */
-import type { BrainProvider, ToolCall } from './brain/BrainProvider.js';
+import type { BrainProvider, ToolCall, BrainUsage } from './brain/BrainProvider.js';
 import type { Provenance } from './memory/types.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { inject } from './memory/inject.js';
@@ -34,6 +34,8 @@ export interface Intent {
   id?: string;
   /** Deliver the brain's reply text back to the originator (e.g. push a reply frame). */
   reply?: (text: string) => void;
+  /** Surface per-pass telemetry (tokens/timing/model) — the server turns it into a `stats` frame. */
+  onUsage?: (usage: BrainUsage) => void;
   /** Memory dir override (tests run against a temp dir; defaults to config.memoryDir). */
   memoryDir?: string;
 }
@@ -174,6 +176,9 @@ export function drain(): Promise<void> {
         logSession({ intent, decision }, intent.memoryDir);
         // surface the reply to the originator (the IPC server pushes a reply frame).
         if (decision.reply && intent.reply) intent.reply(decision.reply);
+        // surface per-pass telemetry AFTER the reply (the server pushes a stats frame; the client
+        // renders it under the answer). Absent when the brain reported no usage (e.g. the stub).
+        if (decision.usage && intent.onUsage) intent.onUsage(decision.usage);
       }
     } finally {
       running = false; // fall genuinely idle — no timer left armed

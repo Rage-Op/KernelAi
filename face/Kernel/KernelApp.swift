@@ -70,6 +70,29 @@ struct MenuBarContent: View {
 
             Divider()
 
+            // Brain selector (CLOUD-01): switch reasoning between the cloud Claude brain and the
+            // local Ollama brain. Selecting one sends a `settings` frame; the daemon swaps the
+            // active BrainProvider and persists the choice.
+            VStack(alignment: .leading, spacing: Tokens.Space.sm) {
+                Text("Brain")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Brain", selection: $coordinator.brain) {
+                    Text("Cloud").tag(Frame.Brain.cloud)
+                    Text("Local").tag(Frame.Brain.local)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                // Drive the selection through the synthesized binding (SwiftUI writes `brain`
+                // safely); run the persist + send-frame side-effects here — `.onChange` fires AFTER
+                // the view update, so we never publish from within a view update.
+                .onChange(of: coordinator.brain) { _, newBrain in
+                    coordinator.persistAndSendBrain(newBrain)
+                }
+            }
+
+            Divider()
+
             Button {
                 spike.run()
             } label: {

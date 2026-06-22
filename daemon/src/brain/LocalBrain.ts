@@ -20,11 +20,43 @@ export const OLLAMA_MODEL = 'qwen2.5:7b-instruct-q4_K_M';
 /** The Ollama chat endpoint (local-only; no network port crosses a trust boundary). */
 export const OLLAMA_CHAT_URL = 'http://localhost:11434/api/chat';
 
-/** The Ollama `/api/chat` response shape (only the fields the brain reads). */
+/**
+ * Output contract appended to the system message so the small local model emits the Decision
+ * shape (qwen2.5 with `format:'json'` returns valid JSON, but without steering it invents shapes
+ * like `{"role":"assistant","content":"…"}`). Mirrors DecisionSchema: `thought` + `reply` for a
+ * conversational answer; `action` only when a tool is genuinely needed. parseDecision still
+ * salvages a reply if the model ignores this, so it is guidance, not a hard dependency.
+ */
+const DECISION_INSTRUCTION =
+  'Respond with ONLY a single JSON object and nothing else. Shape: ' +
+  '{"thought": "<your brief private reasoning>", "reply": "<the message to show the user, in plain prose>"}. ' +
+  'Put your conversational answer in "reply" as plain text (do not nest JSON inside it). ' +
+  'Include an "action" field only if you must call a tool.';
+
+/** The context window (tokens) requested per pass. Surfaced in usage so a client can show it. */
+export const OLLAMA_NUM_CTX = 8192;
+
+/** The Ollama `/api/chat` response shape (only the fields the brain reads). Durations are ns. */
 interface OllamaChatResponse {
   message?: { role: string; content: string };
+  model?: string;
   done?: boolean;
   error?: string;
+  /** Input tokens evaluated. */
+  prompt_eval_count?: number;
+  /** Output tokens generated. */
+  eval_count?: number;
+  /** Generation duration (nanoseconds) — basis for tokens/sec. */
+  eval_duration?: number;
+  /** Model load duration (nanoseconds) — non-zero when the model (re)loaded this turn. */
+  load_duration?: number;
+  /** End-to-end duration (nanoseconds). */
+  total_duration?: number;
+}
+
+/** Nanoseconds → milliseconds (Ollama reports durations in ns), or undefined when absent. */
+function nsToMs(ns?: number): number | undefined {
+  return typeof ns === 'number' ? ns / 1e6 : undefined;
 }
 
 export class LocalBrain implements BrainProvider {
@@ -37,12 +69,12 @@ export class LocalBrain implements BrainProvider {
         body: JSON.stringify({
           model: OLLAMA_MODEL,
           messages: [
-            { role: 'system', content: context },
+            { role: 'system', content: `${context}\n\n${DECISION_INSTRUCTION}` },
             { role: 'user', content: prompt },
           ],
           stream: false,
           format: 'json',
-          options: { temperature: 0.2, num_ctx: 8192 },
+          options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX },
           // keep_alive intentionally OMITTED — never -1 (16GB idle-unload, BRAIN-03 / Pitfall 3).
         }),
       });
@@ -73,6 +105,18 @@ export class LocalBrain implements BrainProvider {
     if (!content) {
       return { thought: 'ollama reply had no message.content', reply: 'Local brain returned an empty reply.' };
     }
-    return parseDecision(content);
+    const decision = parseDecision(content);
+    // Attach per-pass telemetry from Ollama's counters (set programmatically — never parsed from
+    // the model's JSON). The IPC server turns this into a `stats` frame for the client dashboard.
+    decision.usage = {
+      model: body?.model ?? OLLAMA_MODEL,
+      promptTokens: body?.prompt_eval_count,
+      outputTokens: body?.eval_count,
+      evalMs: nsToMs(body?.eval_duration),
+      loadMs: nsToMs(body?.load_duration),
+      totalMs: nsToMs(body?.total_duration),
+      contextWindow: OLLAMA_NUM_CTX,
+    };
+    return decision;
   }
 }

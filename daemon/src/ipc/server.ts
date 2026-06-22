@@ -18,14 +18,74 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { config } from '../config.js';
-import { FrameSchema, type Frame } from './protocol.js';
+import { FrameSchema, type Frame, type Stats } from './protocol.js';
 import { enqueue } from '../loop.js';
-import { applySettings } from '../settings.js';
-import { signalBreakerCancel, setBreakerBroadcast } from '../tools/registry.js';
+import type { BrainUsage } from '../brain/BrainProvider.js';
+import { applySettings, currentBrainSelection } from '../settings.js';
+import { signalBreakerCancel, setBreakerBroadcast, listTools } from '../tools/registry.js';
 import { overrideSingleton } from '../safety/override.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
+
+/**
+ * External integrations / MCP-style "hands" the daemon exposes, surfaced in the capabilities frame
+ * for the client dashboard. Static, human-readable labels (the runtime tool NAMES come from
+ * `listTools()`); this names what each gate-chokepointed capability talks to.
+ */
+const INTEGRATIONS = [
+  'Peekaboo (screen capture + UI automation)',
+  'Playwright (headless web browsing)',
+  'Plaid + SQLCipher (finance)',
+  'Mail / Gmail (drafts + send)',
+  'Claude Code (delegated coding sessions)',
+  'whisper.cpp (speech-to-text)',
+];
+
+/** Cloud pricing (USD per token) for est. cost when the cloud brain reports usage. opus-4-8 rates. */
+const CLOUD_PRICE_PER_TOKEN = { input: 5 / 1_000_000, output: 25 / 1_000_000 };
+
+/** Build the capabilities snapshot pushed to a client on connect. */
+function buildCapabilities(): Frame {
+  return {
+    type: 'capabilities',
+    brain: currentBrainSelection(),
+    daemon: DAEMON_NAME,
+    version: DAEMON_VERSION,
+    injectCap: config.injectCap,
+    tools: listTools(),
+    integrations: INTEGRATIONS,
+  };
+}
+
+/** Derive a `stats` frame from a brain's per-pass usage (tokens/sec + cost computed here). */
+function statsFromUsage(id: string, usage: BrainUsage): Stats {
+  const brain = currentBrainSelection();
+  const tokensPerSec =
+    usage.outputTokens && usage.evalMs && usage.evalMs > 0
+      ? usage.outputTokens / (usage.evalMs / 1000)
+      : undefined;
+  // Local compute is free ($0). Cloud is priced from tokens when the brain reports them.
+  const estCostUsd =
+    brain === 'local'
+      ? 0
+      : (usage.promptTokens ?? 0) * CLOUD_PRICE_PER_TOKEN.input +
+        (usage.outputTokens ?? 0) * CLOUD_PRICE_PER_TOKEN.output;
+  return {
+    type: 'stats',
+    id,
+    brain,
+    model: usage.model,
+    promptTokens: usage.promptTokens,
+    outputTokens: usage.outputTokens,
+    tokensPerSec,
+    evalMs: usage.evalMs,
+    loadMs: usage.loadMs,
+    totalMs: usage.totalMs,
+    contextWindow: usage.contextWindow,
+    estCostUsd,
+  };
+}
 
 /** A handler invoked for every successfully-parsed, schema-valid inbound frame. */
 export type FrameHandler = (frame: Frame, conn: net.Socket) => void;
@@ -162,6 +222,9 @@ export function startIpc(
     conn.setEncoding('utf8');
     clients.add(conn);
     send(conn, { type: 'ready', daemon: DAEMON_NAME, version: DAEMON_VERSION });
+    // Push the runtime capabilities right after ready so a client can render its dashboard
+    // immediately (brain, context cap, tools, integrations). A client that ignores it is unaffected.
+    send(conn, buildCapabilities());
     attachReader(conn, onFrame);
     const drop = () => clients.delete(conn);
     conn.on('close', drop);
@@ -209,6 +272,8 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
         id: frame.id,
         payload: frame.text,
         reply: (text: string) => send(conn, { type: 'reply', id: frame.id, text }),
+        // Per-turn telemetry → a stats frame the client renders under the answer (tokens/sec, cost…).
+        onUsage: (usage) => send(conn, statsFromUsage(frame.id, usage)),
       });
       break;
     case 'ping':

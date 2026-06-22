@@ -128,6 +128,11 @@ export function clearRegistry(): void {
   registry.clear();
 }
 
+/** The registered tool names (sorted), for the `capabilities` introspection frame. Read-only. */
+export function listTools(): string[] {
+  return [...registry.keys()].sort();
+}
+
 /**
  * The ONLY public entry to a tool. Runs `gate.authorize` first, always.
  * Never throws across this boundary — every failure returns a structured escalation.

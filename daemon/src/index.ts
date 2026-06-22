@@ -17,6 +17,8 @@ import { config } from './config.js';
 import { logger } from './memory/log.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import { startIpcServer } from './ipc/server.js';
+import { restorePersistedBrain } from './settings.js';
+import { registerBuiltinTools } from './tools/register-builtins.js';
 import { runHeartbeat } from './heartbeat.js';
 import { runConsolidation } from './memory/consolidate.js';
 import { runCleanup } from './memory/prune.js';
@@ -77,6 +79,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   }
 
   runStartupGuards();
+  // Register the built-in tools (HANDS-04) so the brain can dispatch them and the capabilities
+  // frame reports them. Resilient: a tool whose module fails to load is skipped, not fatal.
+  await registerBuiltinTools();
+  // Re-apply the owner's last brain choice (CLOUD-01) so a launchd relaunch keeps cloud/local.
+  // No-op when never toggled — the loop keeps its default brain.
+  restorePersistedBrain();
   const ipc = await startIpcServer();
   logger.info({ socketPath: config.socketPath }, 'KERNEL daemon online — IPC listening');
 

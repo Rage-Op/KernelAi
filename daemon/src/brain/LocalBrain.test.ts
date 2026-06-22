@@ -48,6 +48,41 @@ test('LocalBrain: a JSON message.content maps to a Decision (model tag is qwen2.
   restoreFetch();
 });
 
+test('LocalBrain: attaches usage (tokens + durations in ms) from Ollama counters', async () => {
+  globalThis.fetch = (async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        model: 'qwen2.5:7b-instruct-q4_K_M',
+        message: { role: 'assistant', content: JSON.stringify({ thought: 't', reply: 'hi' }) },
+        done: true,
+        prompt_eval_count: 120,
+        eval_count: 40,
+        eval_duration: 2_000_000_000, // 2s in ns → 40 tok / 2s = 20 tok/s downstream
+        load_duration: 500_000_000, // 0.5s in ns
+        total_duration: 2_600_000_000, // 2.6s in ns
+      };
+    },
+    async text() {
+      return '';
+    },
+  })) as unknown as typeof fetch;
+
+  const decision = await new LocalBrain().reason('hello', 'ctx');
+  assert.equal(decision.reply, 'hi');
+  assert.ok(decision.usage, 'usage is attached');
+  assert.equal(decision.usage!.promptTokens, 120);
+  assert.equal(decision.usage!.outputTokens, 40);
+  assert.equal(decision.usage!.evalMs, 2000, 'ns → ms');
+  assert.equal(decision.usage!.loadMs, 500, 'ns → ms');
+  assert.equal(decision.usage!.totalMs, 2600, 'ns → ms');
+  assert.equal(decision.usage!.model, 'qwen2.5:7b-instruct-q4_K_M');
+  assert.equal(decision.usage!.contextWindow, 8192, 'reports the num_ctx window');
+
+  restoreFetch();
+});
+
 test('LocalBrain: a rejected fetch (ECONNREFUSED) returns a typed escalation, no throw', async () => {
   globalThis.fetch = (async () => {
     throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:11434'), { code: 'ECONNREFUSED' });

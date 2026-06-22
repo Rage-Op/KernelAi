@@ -132,6 +132,48 @@ export const ErrorSchema = z.object({
 });
 
 /**
+ * ADDITIVE arm (daemon→Face): the daemon's runtime capabilities, pushed once on connect (right
+ * after `ready`). Lets a client render a dashboard of what KERNEL can do WITHOUT reaching into the
+ * daemon's internals: the active brain, the memory-injection context cap, the registered tools, and
+ * the external integrations ("hands"). Appended to the frozen union — existing arms are NEVER
+ * mutated.
+ */
+export const CapabilitiesSchema = z.object({
+  type: z.literal('capabilities'),
+  brain: z.enum(['cloud', 'local']),
+  daemon: z.string(),
+  version: z.string(),
+  /** The memory-injection context cap in characters (config.injectCap). */
+  injectCap: z.number(),
+  /** Registered tool names the brain may dispatch (gate-chokepointed). */
+  tools: z.array(z.string()),
+  /** External integrations / MCP-style hands available to the daemon. */
+  integrations: z.array(z.string()),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): per-turn telemetry for the utterance correlated by `id`. Emitted
+ * after a reply when the active brain reported usage (LocalBrain always does; ClaudeBrain when
+ * wired). Powers the client's tokens/sec, token counts, context use, latency, and cost readouts.
+ * All metric fields optional — a brain that doesn't measure sends only `id`/`brain`/`model`.
+ */
+export const StatsSchema = z.object({
+  type: z.literal('stats'),
+  id: z.string(),
+  brain: z.enum(['cloud', 'local']),
+  model: z.string().optional(),
+  promptTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  tokensPerSec: z.number().optional(),
+  evalMs: z.number().optional(),
+  loadMs: z.number().optional(),
+  totalMs: z.number().optional(),
+  contextWindow: z.number().optional(),
+  /** Actual spend for this turn in USD (0 for the local brain; cloud when token-priced). */
+  estCostUsd: z.number().optional(),
+});
+
+/**
  * P4 ADDITIVE arm (CC-02): one line of the live Kernel↔Claude transcript (daemon→Face). A
  * Claude Code session streams `claude -p --output-format stream-json --include-partial-messages`
  * NDJSON events; each becomes a transcript frame. `role:'kernel'` is the first-person prompt
@@ -205,6 +247,8 @@ export const FrameSchema = z.discriminatedUnion('type', [
   ErrorSchema,
   TranscriptSchema, // P4 additive (daemon→Face Claude Code transcript)
   BreakerPreviewSchema, // P5 additive (daemon→Face Red dry-run preview)
+  CapabilitiesSchema, // additive (daemon→Face runtime capabilities on connect)
+  StatsSchema, // additive (daemon→Face per-turn token/timing/cost telemetry)
 ]);
 
 /** Any valid frame. */
@@ -227,6 +271,8 @@ export type Transcript = z.infer<typeof TranscriptSchema>;
 export type Override = z.infer<typeof OverrideSchema>;
 export type BreakerPreview = z.infer<typeof BreakerPreviewSchema>;
 export type BreakerCancel = z.infer<typeof BreakerCancelSchema>;
+export type Capabilities = z.infer<typeof CapabilitiesSchema>;
+export type Stats = z.infer<typeof StatsSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

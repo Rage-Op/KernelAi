@@ -22,6 +22,29 @@ export interface ToolCall {
   origin?: Provenance;
 }
 
+/**
+ * Per-pass usage/telemetry a brain MAY attach (set programmatically by the brain, NOT parsed from
+ * the model's JSON). LocalBrain fills it from Ollama's response counters; the IPC server turns it
+ * into a `stats` frame so a client can show tokens/sec, context use, latency, and cost. All
+ * optional + additive — a brain that doesn't measure simply omits it.
+ */
+export interface BrainUsage {
+  /** The model that produced the reply (e.g. the Ollama tag or the Claude model id). */
+  model?: string;
+  /** Input/prompt tokens the model evaluated. */
+  promptTokens?: number;
+  /** Output/generated tokens. */
+  outputTokens?: number;
+  /** Generation duration (ms) — the basis for tokens/sec (outputTokens / evalMs). */
+  evalMs?: number;
+  /** Model load duration (ms) — non-zero when the model was (re)loaded into memory this turn. */
+  loadMs?: number;
+  /** End-to-end duration (ms) the brain measured for the pass. */
+  totalMs?: number;
+  /** The model's configured context window (tokens) for this pass, when known. */
+  contextWindow?: number;
+}
+
 /** The structured output of a single reasoning pass. */
 export interface Decision {
   /** The brain's reasoning (logged, not spoken). */
@@ -30,6 +53,8 @@ export interface Decision {
   action?: ToolCall;
   /** Text to surface to Pravin. */
   reply?: string;
+  /** Optional per-pass telemetry (tokens, timing, model). Set by the brain, surfaced as `stats`. */
+  usage?: BrainUsage;
 }
 
 /**
