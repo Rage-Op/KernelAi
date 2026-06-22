@@ -38,7 +38,7 @@
 
 - [x] **HANDS-01**: A Peekaboo MCP tool lets KERNEL capture the screen, click, type, and drive GUI-only apps and menus.
 - [x] **HANDS-02**: KERNEL can open and drive Mail through Peekaboo.
-- [ ] **HANDS-03**: A Playwright (headful) browser tool, using a dedicated persistent profile, can log in, scrape, and fill forms end-to-end.
+- [x] **HANDS-03**: A Playwright (headful) browser tool, using a dedicated persistent profile, can log in, scrape, and fill forms end-to-end.
 - [x] **HANDS-04**: A tool router registers tools (Claude Code, Peekaboo, Playwright, local 7B, mail, weather, finance) and dispatches calls to them.
 - [x] **HANDS-05**: Every tool dispatch routes through a single `gate.authorize(call)` chokepoint (thin tier-classifier in P1; full gate in P4) — no tool self-classifies its tier and no path bypasses the chokepoint.
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-last_updated: "2026-06-22T10:13:41.044Z"
+last_updated: "2026-06-22T10:23:25.138Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 20
+  completed_plans: 6
+  percent: 40
 ---
 
 # Project State
@@ -29,7 +29,7 @@ Plan: 3 of 3 in current phase
 Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [████████░░] 83%
 | Phase 01-skeleton P02 | 5min | 3 tasks | 8 files |
 | Phase 01-skeleton P03 | 11 min | 4 tasks | 15 files |
 | Phase 02-hands P01 | 12 min | 3 tasks | 9 files |
+| Phase 02-hands P03 | ~14 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,7 @@ Recent decisions affecting current work:
 - [Phase 01-skeleton]: drain() returns the in-flight promise when a pass is running (callers await completion) rather than returning early — keeps the single-pass guard while giving deterministic tick semantics
 - [Phase 01-skeleton]: Heartbeat launchd job hangs in node startup on this machine (node-under-launchd quirk, not a code defect); heartbeat write path verified under a launchd-identical env — recorded as a documented manual owner check
 - [Phase 02-hands]: Red-tier in Phase 2 = deny + escalate (LOCKED); the gated Verdict arm is reserved so Phase 5 only edits gate.authorize internals, never the router/tools/loop — No Red autonomy before the Phase-5 breaker; single-chokepoint dispatch with central tier classification and a hard credential fence
+- [Phase 02-hands]: Added an OPTIONAL Tool.surfaceSignals pre-authorize hook (run by registry.dispatch BEFORE the gate) so the browser fill op surfaces live DOM secure-field signals (type/autocomplete/label) into ToolCall.args for the credential fence — the fence can refuse a password field before .fill() without bypassing the single dispatch chokepoint; backward-compatible (Peekaboo/stub omit it) — HANDS-05 for the browser needs the fence to classify live-DOM signals only the adapter can read, and that read must precede gate.authorize
 
 ### Pending Todos
 
@@ -102,6 +104,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T10:13:41.038Z
-Stopped at: Completed 02-hands-01-PLAN.md
+Last session: 2026-06-22T10:23:25.132Z
+Stopped at: Completed 02-hands-03-PLAN.md
 Resume file: None

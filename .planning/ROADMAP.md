@@ -13,7 +13,7 @@ KERNEL is built in the spec's fixed, non-negotiable 5-phase order (§16). The jo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Skeleton** - Persistent TypeScript daemon, markdown memory injection, BrainProvider swap-seam, launchd heartbeat, provenance/quarantine seam (spec Phase 0) (completed 2026-06-22)
-- [ ] **Phase 2: Hands** - Peekaboo MCP + Playwright headful browser + tool router behind a single `gate.authorize` chokepoint with a thin tier-classifier (spec Phase 1)
+- [x] **Phase 2: Hands** - Peekaboo MCP + Playwright headful browser + tool router behind a single `gate.authorize` chokepoint with a thin tier-classifier (spec Phase 1) (completed 2026-06-22)
 - [ ] **Phase 3: Brain + Voice + the Cloud** - Pluggable cloud/local brain, whisper STT, AVSpeechSynthesizer TTS with boundary callbacks, Metal particle cloud, Stage controller choreographing widgets to speech (spec Phase 2)
 - [ ] **Phase 4: Routines + Claude Code + Finance** - Morning-brief engine, email reply flow, finance aggregation + encrypted store + 4-layer leak prevention, Claude Code bridge (spec Phase 3)
 - [ ] **Phase 5: Safety + Self-Maintenance** - GATED: tiered gate + `/override` + circuit breaker, nightly consolidation/cleanup/backup, self changelog + metrics (spec Phase 4)
@@ -52,7 +52,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Foundation (wave 1): Tool contract + router + classify-only `gate.authorize` chokepoint + tier classifier + credential-fence detector + wire the loop's act seam; Red = deny + escalate (LOCKED), Verdict shape Phase-5-ready (HANDS-04, HANDS-05, SAFE-01 seed)
 - [x] 02-02-PLAN.md — Peekaboo MCP adapter (wave 2): persistent MCP client over StdioClientTransport, runtime tool discovery, capture/click/type/menu + open-Mail ops, AX secure-field signals into the fence, registered into the router (HANDS-01, HANDS-02, HANDS-05)
-- [ ] 02-03-PLAN.md — Playwright headful browser tool (wave 2): dedicated persistent profile (never real Chrome), navigate/scrape/fill with full-URL+provenance logging, DOM credential signals into the fence, `file://` fixture unit tests, registered into the router (HANDS-03, HANDS-05)
+- [x] 02-03-PLAN.md — Playwright headful browser tool (wave 2): dedicated persistent profile (never real Chrome), navigate/scrape/fill with full-URL+provenance logging, DOM credential signals into the fence, `file://` fixture unit tests, registered into the router (HANDS-03, HANDS-05)
 
 ### Phase 3: Brain + Voice + the Cloud
 **Goal**: (spec Phase 2) You can talk to Kernel, it reasons, the cloud reacts, and a widget choreographs to its speech — pluggable brain (Claude cloud default, Ollama local toggle, Claude Code routing, always-on local 7B helper), whisper.cpp STT + AVSpeechSynthesizer TTS with `willSpeakRangeOfSpeechString` boundary callbacks, SwiftUI spatial-black canvas with a Metal particle cloud reacting to mic amplitude, and a Stage controller blooming/dissolving one widget on speech. This is the highest-risk lynchpin phase.
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (Phase 5 GATED — re
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Skeleton (spec P0) | 3/3 | Complete   | 2026-06-22 |
-| 2. Hands (spec P1) | 2/3 | In Progress|  |
+| 2. Hands (spec P1) | 3/3 | Complete   | 2026-06-22 |
 | 3. Brain + Voice + the Cloud (spec P2) | 0/TBD | Not started | - |
 | 4. Routines + Claude Code + Finance (spec P3) | 0/TBD | Not started | - |
 | 5. Safety + Self-Maintenance (spec P4) [GATED] | 0/TBD | Gated — owner approval required | - |
