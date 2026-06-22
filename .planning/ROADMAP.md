@@ -89,7 +89,7 @@ Plans:
 - [x] 04-01-PLAN.md — Routine engine (wave 1): YAML load + zod validation + Workday/Weekend/Travel presets + ordered/enabled step runner producing ≤2-widget speak cues via assembleSpeak + 7B mail_triage + Face-side EventKit invitation reply (Yellow) + the four Phase-4 glass widgets (mail/accounts/spending/email-preview) wired into CloudWindow (ROUT-01..05)
 - [x] 04-02-PLAN.md — Email reply flow (wave 2, after 04-01): always-injected ~200-token voice profile + 2-3 few-shot via retrieveAndRerank + stakes routing (casual→7B / high-stakes→cloud) + preview-card payload + Yellow Peekaboo-Mail gated send/mark-read + EmailPreview Send-intent wiring (no auto-send; external To shown) (MAIL-01..05)
 - [x] 04-03-PLAN.md — Finance (wave 1): read-only Plaid (mocked) + SQLCipher store keyed from the Keychain via the `security` CLI + W/M/Y aggregation + the 4-LAYER LEAK STACK proven (gitignore + deliberate-abort pre-push hook + at-rest encryption + startup ls-files assertion) — the hard phase gate before Phase 5 (FIN-01..05)
-- [ ] 04-04-PLAN.md — Claude Code bridge (wave 2, after 04-01): first-person prompts + stream-json transcript over a NEW additive `transcript` IPC arm (byte-exact Swift mirror) + scrollable cornerPill transcript w/ pause + projects/registry.md append + Red-from-CC denied (re-submission shim deferred to Phase 5) (CC-01..04)
+- [x] 04-04-PLAN.md — Claude Code bridge (wave 2, after 04-01): first-person prompts + stream-json transcript over a NEW additive `transcript` IPC arm (byte-exact Swift mirror) + scrollable cornerPill transcript w/ pause + projects/registry.md append + Red-from-CC denied (re-submission shim deferred to Phase 5) (CC-01..04)
 **UI hint**: yes
 
 ### Phase 5: Safety + Self-Maintenance (GATED — DO NOT AUTO-EXECUTE)

@@ -84,10 +84,10 @@
 
 ### Claude Code Bridge (CC) — Phase 4 (spec P3)
 
-- [ ] **CC-01**: KERNEL authors prompts to Claude Code in first person, as Pravin — personal, direct register.
-- [ ] **CC-02**: A transparency corner-pill shows a live, scrollable transcript of Kernel ↔ Claude; Pravin can read along, interject, or pause.
-- [ ] **CC-03**: Any Claude Code action that hits Red tier routes through KERNEL's circuit breaker and does not auto-run mid-session. *(Chokepoint respected in P3; breaker enabled in P4.)*
-- [ ] **CC-04**: Every Claude Code project is written to `projects/registry.md` so KERNEL resumes cold across sessions.
+- [x] **CC-01**: KERNEL authors prompts to Claude Code in first person, as Pravin — personal, direct register.
+- [x] **CC-02**: A transparency corner-pill shows a live, scrollable transcript of Kernel ↔ Claude; Pravin can read along, interject, or pause.
+- [x] **CC-03**: Any Claude Code action that hits Red tier routes through KERNEL's circuit breaker and does not auto-run mid-session. *(Chokepoint respected in P3; breaker enabled in P4.)*
+- [x] **CC-04**: Every Claude Code project is written to `projects/registry.md` so KERNEL resumes cold across sessions.
 
 ### Safety — Tiered Autonomy & Circuit Breaker (SAFE) — Phase 2 (chokepoint, spec P1), Phase 5 (full, spec P4) — GATED
 

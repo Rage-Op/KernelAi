@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-last_updated: "2026-06-22T13:14:38.718Z"
+last_updated: "2026-06-22T13:25:14.547Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
-  completed_plans: 13
-  percent: 60
+  completed_plans: 14
+  percent: 80
 ---
 
 # Project State
@@ -29,7 +29,7 @@ Plan: 3 of 3 in current phase
 Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [█████████░] 93%
 | Phase 04-routines-claude-code-finance P01 | 38 min | 3 tasks | 16 files |
 | Phase 04-routines-claude-code-finance P03 | 10 min | 3 tasks | 17 files |
 | Phase 04-routines-claude-code-finance P02 | 9 min | 3 tasks | 11 files |
+| Phase 04-routines-claude-code-finance P04 | 7 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 03-brain-voice-the-cloud]: Face wiring uses a single @MainActor AppCoordinator owning cloud/stage/speaker/mic/socket + inbound-frame routing; runtime services (mic/socket) are guarded off under the XCTest host so CoreAudio doesn't hang the headless runner — Keeps the talk->reason->speak->choreograph loop auditable in one place; the CoreAudio HAL blocks with no audio device which otherwise hangs xcodebuild test
 - [Phase 04-routines-claude-code-finance]: Routine presets use a presets: map (name -> step-id list) + full steps catalogue; a step runs when enabled AND listed by the active preset
 - [Phase 04-routines-claude-code-finance]: email_reply only fills the email-preview widget; the Yellow send gate (ui.intent dispatch) lands in 04-02 — no auto-send path exists
+- [Phase 04-routines-claude-code-finance]: Claude Code prompts authored first-person as Pravin; transcript streams over a NEW additive FrameSchema arm (Pattern 1, never mutate existing arms) — CC-01/CC-02; the additive-arm guard asserts no removed lines so the frozen contract stays compatible with shipped Face
+- [Phase 04-routines-claude-code-finance]: A Red-tier Claude Code action is DENIED by the shipped gate; re-submission shim DEFERRED to Phase 5 — CC-03/T-04-17; gate.ts unchanged (Red=deny already holds regardless of originator) — Phase 4 is Green/Yellow only
 
 ### Pending Todos
 
@@ -119,6 +122,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T13:14:38.712Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-06-22T13:25:14.266Z
+Stopped at: Completed 04-04-PLAN.md (Phase 4 complete)
 Resume file: None
