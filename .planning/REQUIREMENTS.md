@@ -28,11 +28,11 @@
 ### Brain (BRAIN) — Phase 1 (interface + stub, spec P0), Phase 3 (impls, spec P2)
 
 - [x] **BRAIN-01**: A `BrainProvider` interface — `reason(prompt, context) → { thought, action?, reply? }` — is defined in Phase 1, before any implementation.
-- [ ] **BRAIN-02**: `ClaudeBrain` (Anthropic API, `claude-opus-4-8`) is the default brain for hard planning, recovery, and judgment.
-- [ ] **BRAIN-03**: `LocalBrain` POSTs to Ollama `/api/chat` (`qwen2.5:7b-instruct-q4_K_M`) and is selectable from Settings (`brain = cloud | local`); the UI surfaces that local is private/free but visibly weaker on 16GB.
-- [ ] **BRAIN-04**: A `ClaudeCodeBrain` routes code-heavy reasoning to Claude Code headless.
-- [ ] **BRAIN-05**: The local 7B always runs as the cheap high-frequency helper (triage, classification, short narration) regardless of the selected brain.
-- [ ] **BRAIN-06**: The brain's tool loop is manual (decision → safety gate → execution), never an auto-runner that bypasses the gate.
+- [x] **BRAIN-02**: `ClaudeBrain` (Anthropic API, `claude-opus-4-8`) is the default brain for hard planning, recovery, and judgment.
+- [x] **BRAIN-03**: `LocalBrain` POSTs to Ollama `/api/chat` (`qwen2.5:7b-instruct-q4_K_M`) and is selectable from Settings (`brain = cloud | local`); the UI surfaces that local is private/free but visibly weaker on 16GB.
+- [x] **BRAIN-04**: A `ClaudeCodeBrain` routes code-heavy reasoning to Claude Code headless.
+- [x] **BRAIN-05**: The local 7B always runs as the cheap high-frequency helper (triage, classification, short narration) regardless of the selected brain.
+- [x] **BRAIN-06**: The brain's tool loop is manual (decision → safety gate → execution), never an auto-runner that bypasses the gate.
 
 ### Hands — GUI & Browser & Routing (HANDS) — Phase 2 (spec P1)
 
@@ -45,16 +45,16 @@
 ### Voice (VOICE) — Phase 3 (spec P2)
 
 - [ ] **VOICE-01**: whisper.cpp runs as a subprocess (Core ML/ANE build); mic audio is piped in and a transcript is read out (STT).
-- [ ] **VOICE-02**: Pravin can speak to KERNEL and it reasons and responds.
+- [x] **VOICE-02**: Pravin can speak to KERNEL and it reasons and responds.
 - [ ] **VOICE-03**: TTS uses AVSpeechSynthesizer; the `willSpeakRangeOfSpeechString` delegate emits word/segment boundaries that drive on-screen choreography.
 - [ ] **VOICE-04**: The Stage controller supports both word-level (callback-driven) and sentence-level (time-based) pacing so choreography survives flaky boundary callbacks.
 
 ### The Cloud — Face / UI (CLOUD) — Phase 3 (spec P2)
 
-- [ ] **CLOUD-01**: A native SwiftUI menubar app launches at login (MenuBarExtra + SMAppService) and connects to the daemon over the localhost socket.
+- [x] **CLOUD-01**: A native SwiftUI menubar app launches at login (MenuBarExtra + SMAppService) and connects to the daemon over the localhost socket.
 - [ ] **CLOUD-02**: A deep spatial-black canvas renders a real GPU particle cloud (Metal compute-shader particles) that drifts when idle.
 - [ ] **CLOUD-03**: While speaking, mic RMS amplitude pushes particles outward and brightens them; quiet pulls them calm — color lives between indigo `#7C8CFF` and cyan `#42E8E0`.
-- [ ] **CLOUD-04**: A Stage controller, driven by the routine engine and TTS boundaries, makes a frosted-glass widget bloom forward (0.96→1, opacity in, forward-blur clears) while a topic is spoken, then disperses it back into the cloud — one or two widgets in focus at a time.
+- [x] **CLOUD-04**: A Stage controller, driven by the routine engine and TTS boundaries, makes a frosted-glass widget bloom forward (0.96→1, opacity in, forward-blur clears) while a topic is spoken, then disperses it back into the cloud — one or two widgets in focus at a time.
 - [ ] **CLOUD-05**: The cloud has two states: full-screen when speaking/at boot, and a shrunk top-left corner pill during a Claude Code session.
 - [ ] **CLOUD-06**: The design language holds — shadcn-grade dark restraint, hairline borders, SF Pro, tabular numerals for money, spring motion (nothing snaps), one accent only.
 

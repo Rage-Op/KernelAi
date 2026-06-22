@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-last_updated: "2026-06-22T10:23:25.138Z"
+last_updated: "2026-06-22T11:20:21.547Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 10
+  completed_plans: 7
   percent: 40
 ---
 
@@ -29,7 +29,7 @@ Plan: 3 of 3 in current phase
 Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 01-skeleton P03 | 11 min | 4 tasks | 15 files |
 | Phase 02-hands P01 | 12 min | 3 tasks | 9 files |
 | Phase 02-hands P03 | ~14 min | 3 tasks | 7 files |
+| Phase 03 P01 | 19 min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 01-skeleton]: Heartbeat launchd job hangs in node startup on this machine (node-under-launchd quirk, not a code defect); heartbeat write path verified under a launchd-identical env — recorded as a documented manual owner check
 - [Phase 02-hands]: Red-tier in Phase 2 = deny + escalate (LOCKED); the gated Verdict arm is reserved so Phase 5 only edits gate.authorize internals, never the router/tools/loop — No Red autonomy before the Phase-5 breaker; single-chokepoint dispatch with central tier classification and a hard credential fence
 - [Phase 02-hands]: Added an OPTIONAL Tool.surfaceSignals pre-authorize hook (run by registry.dispatch BEFORE the gate) so the browser fill op surfaces live DOM secure-field signals (type/autocomplete/label) into ToolCall.args for the credential fence — the fence can refuse a password field before .fill() without bypassing the single dispatch chokepoint; backward-compatible (Peekaboo/stub omit it) — HANDS-05 for the browser needs the fence to classify live-DOM signals only the adapter can read, and that read must precede gate.authorize
+- [Phase 03]: ClaudeCodeBrain uses zero-dep node:child_process (not execa) — Avoids a new dependency and its slopcheck/legitimacy checkpoint (T-03-SC); the claude -p JSON contract is stable
+- [Phase 03]: ClaudeCodeBrain fenced Green/Yellow-only (--permission-mode dontAsk + --allowedTools Read) — BRAIN-04/T-03-05: no ambient money/irreversible rights this phase; Red re-submission shim deferred to Phase 4 (CC-03)
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T10:23:25.132Z
+Last session: 2026-06-22T11:19:59.774Z
 Stopped at: Completed 02-hands-03-PLAN.md
 Resume file: None
