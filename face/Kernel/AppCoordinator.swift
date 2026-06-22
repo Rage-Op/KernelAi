@@ -100,16 +100,57 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    /// Latest widget payloads, keyed by widget name (events/mail/…). Task 3 reads
-    /// `events` here when the Stage presents the events widget.
+    /// Latest widget payloads, keyed by widget name (events/mail/…). The Stage reads
+    /// `events` here when it presents the events widget; a `widget.data` frame fills it.
     @Published var latestWidgetData: [String: JSONValue] = [:]
 
-    // MARK: Stage actions → cloud burst (Task 3 wires the widget bloom/dissolve)
+    /// Widgets currently bloomed in focus, in present order. The CloudWindow renders
+    /// these as glass widgets blooming from the cloud. Choreography contract: one or
+    /// two in focus at a time — a third present dissolves the oldest first.
+    @Published private(set) var presentedWidgets: [String] = []
+    /// The data bound to each presented widget at present time (cue data wins, else
+    /// the latest widget.data payload for that widget).
+    @Published private(set) var presentedData: [String: JSONValue] = [:]
+
+    /// Max widgets in focus simultaneously (UI-SPEC: one or two, never a wall).
+    private let maxInFocus = 2
+
+    // MARK: Stage actions → widget bloom/dissolve + cloud burst (CLOUD-04)
 
     private func wireStageActions() {
-        // Task 3 replaces/extends this to drive EventsWidget present/dismiss. For
-        // Task 2 each fired cue pulses the cloud (the boundary-burst flash, UI-SPEC).
-        stage.onAction = { [weak self] _ in self?.cloud.pulse() }
+        stage.onAction = { [weak self] action in
+            guard let self else { return }
+            // Every fired cue flashes the cloud (the boundary-burst, UI-SPEC).
+            self.cloud.pulse()
+            switch action {
+            case .present(let widget, let data):
+                self.present(widget: widget, data: data)
+            case .dismiss(let widget):
+                self.dismiss(widget: widget)
+            case .other:
+                break
+            }
+        }
+    }
+
+    /// Bloom a widget into focus. Cue `data` wins; else fall back to the latest
+    /// `widget.data` payload. Dissolves the oldest if we're over the focus cap.
+    private func present(widget: String, data: JSONValue?) {
+        guard !widget.isEmpty else { return }
+        presentedData[widget] = data ?? latestWidgetData[widget]
+        if !presentedWidgets.contains(widget) {
+            presentedWidgets.append(widget)
+            while presentedWidgets.count > maxInFocus {
+                let oldest = presentedWidgets.removeFirst()
+                presentedData[oldest] = nil
+            }
+        }
+    }
+
+    /// Dissolve a widget back into the cloud.
+    private func dismiss(widget: String) {
+        presentedWidgets.removeAll { $0 == widget }
+        presentedData[widget] = nil
     }
 
     private func wireFrames() { /* socket.onFrame set in start() */ }

@@ -14,6 +14,7 @@
 		623812EED131A157C7B8C34B /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227343D40D493FAC0CCF6BCE /* Speaker.swift */; };
 		62CA2DAC1282964973C7B420 /* Particles.metal in Sources */ = {isa = PBXBuildFile; fileRef = C982AA0EAACC4CC3F4DE2B5A /* Particles.metal */; };
 		8594589FAE12D887683700AC /* CloudWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 962A24B4F107DB1A15EBA0EE /* CloudWindow.swift */; };
+		87731C5F5B698E1426F2B662 /* EventsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327C7CEFE4DEFF1605EBCD86 /* EventsWidget.swift */; };
 		9D5510B23514F8FB38E72A25 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EC2621AFC72F7E6F7507D65 /* AppCoordinator.swift */; };
 		A241F475A27768524D95BDF2 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E337FF479D32228A89AC2A21 /* Tokens.swift */; };
 		A394F9FD3365C26F7AF108E8 /* KernelSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17EF899658131B94C9F042DA /* KernelSocket.swift */; };
@@ -43,6 +44,7 @@
 		17EF899658131B94C9F042DA /* KernelSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KernelSocket.swift; sourceTree = "<group>"; };
 		1E0CD605F7A5ED78342D424E /* KernelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KernelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		227343D40D493FAC0CCF6BCE /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
+		327C7CEFE4DEFF1605EBCD86 /* EventsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsWidget.swift; sourceTree = "<group>"; };
 		3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameCodecTests.swift; sourceTree = "<group>"; };
 		48D7F81C2056D4C22D02909D /* Frames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Frames.swift; sourceTree = "<group>"; };
 		5C1ADCD649DA3432EADAEC68 /* StageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageController.swift; sourceTree = "<group>"; };
@@ -67,6 +69,14 @@
 				AA1ECABC73A7064F118CDB7C /* BoundarySpike.swift */,
 			);
 			path = Spike;
+			sourceTree = "<group>";
+		};
+		2539E772C4442339C9DEE491 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				327C7CEFE4DEFF1605EBCD86 /* EventsWidget.swift */,
+			);
+			path = Widgets;
 			sourceTree = "<group>";
 		};
 		370F3EB30091DCA3907C4E74 /* Stage */ = {
@@ -146,6 +156,7 @@
 				52BB9F891D95D85002D5E24E /* IPC */,
 				370F3EB30091DCA3907C4E74 /* Stage */,
 				3E6E6E95828FD9E318201423 /* Voice */,
+				2539E772C4442339C9DEE491 /* Widgets */,
 			);
 			path = Kernel;
 			sourceTree = "<group>";
@@ -246,6 +257,7 @@
 				C7B804AEED73EF401A504B2E /* BoundarySpike.swift in Sources */,
 				8594589FAE12D887683700AC /* CloudWindow.swift in Sources */,
 				3D603DC06ACAC7B04655DF3A /* Cue.swift in Sources */,
+				87731C5F5B698E1426F2B662 /* EventsWidget.swift in Sources */,
 				F038967A9CA01EA613799063 /* Frames.swift in Sources */,
 				BA2AC7AEF3EE4A747A3034D5 /* KernelApp.swift in Sources */,
 				A394F9FD3365C26F7AF108E8 /* KernelSocket.swift in Sources */,

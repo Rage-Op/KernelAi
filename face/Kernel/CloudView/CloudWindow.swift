@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// The deep spatial-black canvas hosting the living cloud (CLOUD-02/05).
+/// The deep spatial-black canvas hosting the living cloud + the bloomed widgets
+/// (CLOUD-02/04/05).
 ///
-/// Task 2 establishes the full-screen canvas + the cloud. Task 3 adds the
-/// full-screen ↔ corner-pill scene switch and the bloomed widget layer; the
-/// scaffolding for both scene states already lives here so the switch is a
-/// spring transition, never a hard cut (Motion Law).
+/// Two states, one element (CLOUD-05): full-screen (boot/speaking) ↔ a top-left
+/// corner pill (Claude Code session). The transition is a spring (Motion.cloudState
+/// — nothing snaps, no hard cut). Widgets bloom from the cloud on a Stage cue and
+/// dissolve back into it (CLOUD-04); the widget views own their own bloom/dissolve.
 struct CloudWindow: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -16,38 +17,79 @@ struct CloudWindow: View {
 
             switch coordinator.scene {
             case .fullscreen, .idle:
-                fullScreenCloud
+                fullScreen
             case .cornerPill:
-                cornerPillCloud
+                cornerPill
             }
         }
-        .animation(Motion.cloudState, value: coordinator.scene)
+        .animation(Motion.cloudState, value: coordinator.scene)   // spring migration, no snap
     }
 
-    // MARK: Full-screen state (boot / speaking) — Task 3 layers widgets on top.
+    // MARK: Full-screen state (boot / speaking) — cloud owns the canvas, widgets bloom.
 
-    private var fullScreenCloud: some View {
-        CloudCanvas(state: coordinator.cloud)
-            .ignoresSafeArea()
-            .transition(.opacity)
+    private var fullScreen: some View {
+        ZStack {
+            // The living cloud fills the canvas.
+            CloudCanvas(state: coordinator.cloud)
+                .ignoresSafeArea()
+
+            // The bloomed widget layer. One or two in focus at a time (the coordinator
+            // caps it). Each widget animates its own bloom/dissolve via `isPresented`.
+            HStack(spacing: Tokens.Space.xl) {                    // 32px between co-focused widgets
+                ForEach(coordinator.presentedWidgets, id: \.self) { name in
+                    widgetView(named: name)
+                }
+            }
+            .padding(.bottom, Tokens.Space.xxl)                    // 48px stage inset
+        }
+        .transition(.opacity)
     }
 
-    // MARK: Corner pill (Task 3 fleshes out the migration + transcript).
+    /// Render a widget by name. Phase 3 ships the events widget end-to-end; the
+    /// other four are specified in 03-UI-SPEC and rendered in Phase 4.
+    @ViewBuilder
+    private func widgetView(named name: String) -> some View {
+        switch name {
+        case "events":
+            EventsWidget(
+                payload: EventsPayload.from(coordinator.presentedData["events"]),
+                isPresented: true)
+        default:
+            EmptyView()
+        }
+    }
 
-    private var cornerPillCloud: some View {
+    // MARK: Corner pill (Claude Code session) — miniature cloud + accent live-pulse dot.
+
+    private var cornerPill: some View {
         VStack {
             HStack {
-                CloudCanvas(state: coordinator.cloud, particleCount: ParticleRenderer.minCount)
-                    .frame(width: 220, height: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.pill))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Tokens.Radius.pill)
-                            .stroke(Tokens.hairline, lineWidth: 1))
-                    .padding(.top, 16)
+                pillBody
+                    .padding(.top, 16)                             // 16px corner inset (UI-SPEC exception)
                     .padding(.leading, 16)
                 Spacer()
             }
             Spacer()
         }
+        .transition(.scale(scale: 0.9).combined(with: .opacity))
+    }
+
+    private var pillBody: some View {
+        HStack(spacing: Tokens.Space.sm) {
+            CloudCanvas(state: coordinator.cloud, particleCount: ParticleRenderer.minCount)
+                .frame(width: 64, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.pill))
+            // The accent live-pulse dot (UI-SPEC accent reserved use #5).
+            Circle()
+                .fill(Tokens.accentCyan)
+                .frame(width: 8, height: 8)
+                .opacity(0.9)
+        }
+        .padding(.horizontal, 12)                                  // 12px pill padding (UI-SPEC exception)
+        .padding(.vertical, 8)
+        .background(Tokens.denseMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.pill))
+        .overlay(
+            RoundedRectangle(cornerRadius: Tokens.Radius.pill)
+                .stroke(Tokens.hairline, lineWidth: 1))            // white-7% hairline
     }
 }
