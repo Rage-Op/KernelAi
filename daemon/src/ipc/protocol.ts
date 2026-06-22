@@ -132,6 +132,23 @@ export const ErrorSchema = z.object({
 });
 
 /**
+ * P4 ADDITIVE arm (CC-02): one line of the live Kernel↔Claude transcript (daemon→Face). A
+ * Claude Code session streams `claude -p --output-format stream-json --include-partial-messages`
+ * NDJSON events; each becomes a transcript frame. `role:'kernel'` is the first-person prompt
+ * KERNEL authored as Pravin; `role:'claude'` is what the session is doing. `partial:true` is a
+ * streaming chunk that UPDATES the in-progress line; a final/absent partial finalizes it. The
+ * Face renders ONLY this typed text in the cornerPill (no remote-resource loads — T-04-19).
+ * Appended to the frozen FrameSchema union — existing arms are NEVER mutated (Pattern 1).
+ */
+export const TranscriptSchema = z.object({
+  type: z.literal('transcript'),
+  id: z.string(),
+  role: z.enum(['kernel', 'claude']),
+  text: z.string(),
+  partial: z.boolean().optional(),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
  * plus the designed-for P2/P3 shapes. `safeParse` every incoming line against this.
  */
@@ -150,6 +167,7 @@ export const FrameSchema = z.discriminatedUnion('type', [
   WidgetDataSchema,
   UiStateSchema, // P3 additive (daemon→Face cloud scene state)
   ErrorSchema,
+  TranscriptSchema, // P4 additive (daemon→Face Claude Code transcript)
 ]);
 
 /** Any valid frame. */
@@ -168,6 +186,7 @@ export type Speak = z.infer<typeof SpeakSchema>;
 export type WidgetData = z.infer<typeof WidgetDataSchema>;
 export type UiState = z.infer<typeof UiStateSchema>;
 export type ErrorFrame = z.infer<typeof ErrorSchema>;
+export type Transcript = z.infer<typeof TranscriptSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum
