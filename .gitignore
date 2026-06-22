@@ -148,3 +148,15 @@ vite.config.ts.timestamp-*
 kernel-memory/
 .DS_Store
 **/.DS_Store
+
+# Swift / Xcode (the Face — face/)
+# The committed Kernel.xcodeproj is the source of truth (reproducible without xcodegen);
+# per-user state and build products are ignored.
+**/*.xcodeproj/xcuserdata/
+**/*.xcodeproj/project.xcworkspace/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+**/xcuserdata/
+DerivedData/
+**/DerivedData/
+**/.build/
+*.xcuserstate

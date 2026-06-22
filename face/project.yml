@@ -1,0 +1,69 @@
+name: Kernel
+options:
+  bundleIdPrefix: com.kernel
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+
+settings:
+  base:
+    # No code-signing identity is provisioned in this build environment.
+    # The compile-verify gate (xcodebuild build) runs with signing disabled;
+    # the owner's signed local build supplies the stable Developer-ID identity
+    # that gives TCC permanence (Pitfall 4). Bundle id stays stable regardless.
+    PRODUCT_BUNDLE_IDENTIFIER: com.kernel.face
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+
+targets:
+  Kernel:
+    type: application
+    platform: macOS
+    sources:
+      - path: Kernel
+      - path: Spike
+    info:
+      path: Kernel/Info.plist
+      properties:
+        CFBundleDisplayName: Kernel
+        CFBundleName: Kernel
+        # Menubar-only agent: no Dock icon, no main window at launch.
+        LSUIElement: true
+        # Declared from the FIRST build so the TCC identity is stable even
+        # though the boundary spike itself does not need the mic (Pitfall 4).
+        NSMicrophoneUsageDescription: "KERNEL listens for your voice so you can talk to it directly."
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: Kernel/Kernel.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        # Non-sandboxed Developer-ID app (RESEARCH Open Question 4): avoids
+        # UDS/mic sandbox exceptions; not destined for the Mac App Store.
+        ENABLE_APP_SANDBOX: false
+
+  KernelTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: KernelTests
+    dependencies:
+      - target: Kernel
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Kernel.app/Contents/MacOS/Kernel"
+
+schemes:
+  Kernel:
+    build:
+      targets:
+        Kernel: all
+        KernelTests: [test]
+    test:
+      targets:
+        - KernelTests
+      gatherCoverageData: false

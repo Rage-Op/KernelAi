@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Non-sandboxed Developer-ID app (RESEARCH Open Question 4): App Sandbox is
+	  OFF so the UDS client (03-04) and mic capture avoid sandbox exceptions.
+	  The microphone device entitlement is declared NOW so the TCC identity is
+	  stable from the first signed build (Pitfall 4) — the boundary spike does
+	  not use the mic, but the Face will (whisper PCM, VOICE-01) in 03-04.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.device.microphone</key>
+	<true/>
+</dict>
+</plist>
