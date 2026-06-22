@@ -105,7 +105,11 @@ Plans:
   5. Maintenance jobs run on schedule via launchd: a nightly consolidation distills logs → reflections and promotes only durable, source-vetted facts → knowledge (IDENTITY.md and knowledge/ unchanged after a consolidation run that processed only external-sourced logs), a cleanup prunes stale working-memory/logs, and a backup uses explicit `git add <paths>` (never `-A`) to push the memory repo to private GitHub never including finance/, with self/changelog.md and self/metrics.md maintained (MEM-07, MAINT-01, MAINT-02, MAINT-03).
 **Mode:** mvp
 **Depends on**: Phase 4 (all four finance-leak prevention layers verified passing) + explicit owner approval
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 05-01-PLAN.md — Gate/breaker activation (wave 1): Wave-0 test harness + atomic spend-ledger + audit + flags + scoped /override + the pure injectable circuit breaker + flip the gate's reserved gated arm (external-Red hard block above /override & breaker, flag-gated Red→gated) + wire breaker into dispatch + origin taint on ToolCall + additive /override/breaker-preview/cancel IPC frames (SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-07)
+- [ ] 05-02-PLAN.md — Claude Code Red shim + obstacle ladder (wave 2, after 05-01): disallowedTools Red deny rules + permission_denials → gate re-entry (origin:'self') into the same breaker; obstacle ladder try→replan→decompose→backoff→escalate-with-recommendation, Red gates skip the ladder (SAFE-05, SAFE-06)
+- [ ] 05-03-PLAN.md — Self-maintenance (wave 2, after 05-01): consolidation (no-promote external/IDENTITY) + cleanup + finance-safe backup (explicit-add, temp-remote dry-run, fails loud without remote/hook) + self/changelog + self/metrics + 3 launchd plists + index.ts --consolidate/--cleanup/--backup modes (MEM-07, MAINT-01, MAINT-02, MAINT-03)
 
 ## Progress
 
@@ -118,4 +122,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (Phase 5 GATED — re
 | 2. Hands (spec P1) | 3/3 | Complete   | 2026-06-22 |
 | 3. Brain + Voice + the Cloud (spec P2) | 4/4 | Complete   | 2026-06-22 |
 | 4. Routines + Claude Code + Finance (spec P3) | 4/4 | Complete   | 2026-06-22 |
-| 5. Safety + Self-Maintenance (spec P4) [GATED] | 0/TBD | Gated — owner approval required | - |
+| 5. Safety + Self-Maintenance (spec P4) [GATED] | 0/3 | Gated — owner approval required | - |
