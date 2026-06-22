@@ -56,3 +56,26 @@ test('authorize: a yellow non-secret type is allowed', async () => {
   assert.equal(verdict.kind, 'allow');
   assert.equal(verdict.tier, 'yellow');
 });
+
+// --- CC-03: a Red-tier action proposed by a Claude Code session is DENIED ---
+// (the re-submission shim is DEFERRED to Phase 5 — Green/Yellow only this phase).
+
+test('authorize: a Red action from a Claude Code session is DENIED (shim deferred to Phase 5)', async () => {
+  // A Claude Code session that proposes a destructive op routes through the SAME shipped
+  // chokepoint as everything else — the originator does not matter. It classifies Red and
+  // is denied + escalated; there is NO 'gated'/'allow' arm for Red this phase (CC-03).
+  const rmrf = await authorize(call('claude-code', { op: 'rm -rf', path: '/' }));
+  assert.equal(rmrf.kind, 'deny', 'a Claude Code rm -rf is denied, never gated or allowed');
+  assert.equal(rmrf.tier, 'red');
+  assert.notEqual(rmrf.kind, 'gated', 'NO gated arm for Red — the shim is deferred to Phase 5');
+  assert.notEqual(rmrf.kind, 'allow', 'NO Red autonomy for a Claude Code session');
+
+  const purchase = await authorize(call('claude-code', { op: 'purchase', item: 'server' }));
+  assert.equal(purchase.kind, 'deny', 'a Claude Code purchase is denied');
+  assert.equal(purchase.tier, 'red');
+  assert.match(
+    purchase.kind === 'deny' ? purchase.escalation.reason : '',
+    /Red-tier/,
+    'the denial carries a Red-tier escalation for the originator',
+  );
+});

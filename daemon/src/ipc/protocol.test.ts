@@ -78,6 +78,45 @@ test('protocol: a ui.state frame (cloud scene state) round-trips through FrameSc
   assert.equal(FrameSchema.safeParse({ type: 'ui.state', state: 'maximized' }).success, false);
 });
 
+// --- P4 ADDITIVE arm (CC-02) — the Claude Code transcript ---
+
+test('protocol: a transcript frame (Claude Code bridge) round-trips through FrameSchema', () => {
+  // a kernel line (no partial flag)
+  assert.equal(
+    FrameSchema.safeParse({ type: 'transcript', id: 't1', role: 'kernel', text: 'I need you to refactor the parser.' }).success,
+    true,
+  );
+  // a claude line, streaming (partial:true)
+  assert.equal(
+    FrameSchema.safeParse({ type: 'transcript', id: 't2', role: 'claude', text: 'Reading the file…', partial: true }).success,
+    true,
+  );
+  // a claude line, finalized (partial:false)
+  assert.equal(
+    FrameSchema.safeParse({ type: 'transcript', id: 't3', role: 'claude', text: 'Done.', partial: false }).success,
+    true,
+  );
+});
+
+test('protocol: a malformed transcript frame is rejected', () => {
+  // an out-of-enum role is rejected
+  assert.equal(
+    FrameSchema.safeParse({ type: 'transcript', id: 't4', role: 'martian', text: 'x' }).success,
+    false,
+  );
+  // missing role is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'transcript', id: 't5', text: 'x' }).success, false);
+  // missing text is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'transcript', id: 't6', role: 'kernel' }).success, false);
+  // missing id is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'transcript', role: 'kernel', text: 'x' }).success, false);
+  // a non-boolean partial is rejected
+  assert.equal(
+    FrameSchema.safeParse({ type: 'transcript', id: 't7', role: 'claude', text: 'x', partial: 'yes' }).success,
+    false,
+  );
+});
+
 test('protocol: a speak frame carrying cues[] + onFinish round-trips (the frozen SpeakSchema)', () => {
   const r = FrameSchema.safeParse({
     type: 'speak',
