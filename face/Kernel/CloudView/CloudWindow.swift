@@ -112,15 +112,17 @@ struct CloudWindow: View {
     }
 
     private var pillBody: some View {
-        HStack(spacing: Tokens.Space.sm) {
+        HStack(alignment: .top, spacing: Tokens.Space.sm) {
+            // The miniature living cloud — the session's "breathing" presence.
             CloudCanvas(state: coordinator.cloud, particleCount: ParticleRenderer.minCount)
                 .frame(width: 64, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.pill))
-            // The accent live-pulse dot (UI-SPEC accent reserved use #5).
-            Circle()
-                .fill(Tokens.accentCyan)
-                .frame(width: 8, height: 8)
-                .opacity(0.9)
+            // The live, scrollable Kernel↔Claude transcript with its streaming pulse + pause (CC-02).
+            TranscriptPill(
+                lines: coordinator.transcriptLines,
+                isStreaming: coordinator.transcriptStreaming,
+                isPaused: coordinator.transcriptPaused,
+                onTogglePause: { coordinator.toggleTranscriptPause() })
         }
         .padding(.horizontal, 12)                                  // 12px pill padding (UI-SPEC exception)
         .padding(.vertical, 8)

@@ -93,10 +93,53 @@ final class AppCoordinator: ObservableObject {
         case .uiState(let state):
             scene = state
             cloud.center = (state == .cornerPill) ? SIMD2<Float>(-0.6, 0.6) : .zero
+        case .transcript(let id, let role, let text, let partial):
+            appendTranscript(id: id, role: role, text: text, partial: partial ?? false)
         case .error(_, let message):
             log.error("daemon error: \(message, privacy: .public)")
         default:
             break  // hello/ping/pong/utterance/ui.intent/settings are not inbound-handled here
+        }
+    }
+
+    // MARK: Claude Code transcript buffer (CC-02)
+
+    /// The live Kernel↔Claude transcript, oldest first. The cornerPill's TranscriptPill renders it.
+    @Published private(set) var transcriptLines: [TranscriptLine] = []
+
+    /// True while a partial chunk is in flight — drives the pill's accent live-pulse dot.
+    @Published private(set) var transcriptStreaming: Bool = false
+
+    /// True when the owner has paused the live stream (the pill's pause control toggles this).
+    @Published private(set) var transcriptPaused: Bool = false
+
+    /// Append (or merge) a transcript frame into the buffer. A partial CLAUDE chunk updates the
+    /// in-progress claude line in place (it does not duplicate); a non-partial line finalizes it.
+    /// Kernel lines (the first-person prompt) always append as their own finalized line. While
+    /// paused, frames are still buffered (the owner resumes to a current transcript) but the
+    /// auto-scroll/pulse reflect the paused state.
+    func appendTranscript(id: String, role: Frame.TranscriptRole, text: String, partial: Bool) {
+        if role == .claude,
+           let lastIdx = transcriptLines.indices.last,
+           transcriptLines[lastIdx].role == .claude,
+           transcriptLines[lastIdx].partial {
+            // the previous claude line was still streaming — update it in place (no duplicate).
+            transcriptLines[lastIdx].text = text
+            transcriptLines[lastIdx].partial = partial
+        } else {
+            transcriptLines.append(TranscriptLine(id: id, role: role, text: text, partial: partial))
+        }
+        // streaming is live while the newest line is a partial claude chunk and not paused.
+        transcriptStreaming = !transcriptPaused && partial && role == .claude
+    }
+
+    /// Toggle the owner's pause control. Pausing freezes the streaming pulse; resuming re-enables it.
+    func toggleTranscriptPause() {
+        transcriptPaused.toggle()
+        if transcriptPaused {
+            transcriptStreaming = false
+        } else if let last = transcriptLines.last, last.role == .claude, last.partial {
+            transcriptStreaming = true
         }
     }
 

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		079CC7C6F258BB709F7A37AF /* FrameCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */; };
 		0ED98BF241F2969FC4555008 /* StageControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16148C3EFEBBE30F2FCE9282 /* StageControllerTests.swift */; };
+		22C171C6481CF99FE8AFD0C5 /* TranscriptPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387445C0B4E402C94DC5BECF /* TranscriptPill.swift */; };
 		245DC335B11C77F30BD9A763 /* MailWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7BD7449C3619D00A9DB9024 /* MailWidget.swift */; };
 		33AC917533E193EC87351912 /* BootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23763944C65D1590306AA94 /* BootstrapTests.swift */; };
 		3D603DC06ACAC7B04655DF3A /* Cue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E2D51A82AB1B4CACE1AE21 /* Cue.swift */; };
@@ -27,6 +28,7 @@
 		C359BB5F854B07B0F6B41CB2 /* EmailPreviewWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 193AFCAC879427A10B16F78B /* EmailPreviewWidget.swift */; };
 		C75E111C26F08812690A866D /* StageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1ADCD649DA3432EADAEC68 /* StageController.swift */; };
 		C7B804AEED73EF401A504B2E /* BoundarySpike.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1ECABC73A7064F118CDB7C /* BoundarySpike.swift */; };
+		D3367F473141E5E6A42D71A1 /* TranscriptPillTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE4605655DAE1B3771694AE /* TranscriptPillTests.swift */; };
 		D88A92F3A0BE94C02FFD93BD /* SpendingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E9C2E13E9EFEB9185BCAA09 /* SpendingWidget.swift */; };
 		E89A73582776E9C984435FC2 /* EmailPreviewWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63092470ECF7A7269EEB57E4 /* EmailPreviewWidgetTests.swift */; };
 		F027D3F9A182E74DF34C573C /* WidgetRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7F120C9369A4789389E371 /* WidgetRenderTests.swift */; };
@@ -56,6 +58,7 @@
 		1ED9D858069467D129FE708C /* AccountsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsWidget.swift; sourceTree = "<group>"; };
 		227343D40D493FAC0CCF6BCE /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		327C7CEFE4DEFF1605EBCD86 /* EventsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsWidget.swift; sourceTree = "<group>"; };
+		387445C0B4E402C94DC5BECF /* TranscriptPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptPill.swift; sourceTree = "<group>"; };
 		38E4382BD668F57EB831E3AE /* EventKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitBridge.swift; sourceTree = "<group>"; };
 		3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameCodecTests.swift; sourceTree = "<group>"; };
 		3E9C2E13E9EFEB9185BCAA09 /* SpendingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingWidget.swift; sourceTree = "<group>"; };
@@ -70,6 +73,7 @@
 		A5E2D51A82AB1B4CACE1AE21 /* Cue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cue.swift; sourceTree = "<group>"; };
 		AA1ECABC73A7064F118CDB7C /* BoundarySpike.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundarySpike.swift; sourceTree = "<group>"; };
 		B7BD7449C3619D00A9DB9024 /* MailWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailWidget.swift; sourceTree = "<group>"; };
+		BDE4605655DAE1B3771694AE /* TranscriptPillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptPillTests.swift; sourceTree = "<group>"; };
 		C982AA0EAACC4CC3F4DE2B5A /* Particles.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Particles.metal; sourceTree = "<group>"; };
 		E0B90F22E877B592964F5962 /* Particles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Particles.swift; sourceTree = "<group>"; };
 		E23763944C65D1590306AA94 /* BootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootstrapTests.swift; sourceTree = "<group>"; };
@@ -143,6 +147,7 @@
 				3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */,
 				55DA7395386F5C580A2A5678 /* MailWidgetTests.swift */,
 				16148C3EFEBBE30F2FCE9282 /* StageControllerTests.swift */,
+				BDE4605655DAE1B3771694AE /* TranscriptPillTests.swift */,
 				1A7F120C9369A4789389E371 /* WidgetRenderTests.swift */,
 			);
 			path = KernelTests;
@@ -155,6 +160,14 @@
 				E337FF479D32228A89AC2A21 /* Tokens.swift */,
 			);
 			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		723E3379F1DC02759D8C9EEA /* ClaudeCode */ = {
+			isa = PBXGroup;
+			children = (
+				387445C0B4E402C94DC5BECF /* TranscriptPill.swift */,
+			);
+			path = ClaudeCode;
 			sourceTree = "<group>";
 		};
 		D2F83C08BE202570DCF2D367 /* Calendar */ = {
@@ -183,6 +196,7 @@
 				7B5D7D7D8E4B96BA7A8ED69B /* Kernel.entitlements */,
 				EF805AA6C2148C3ABD263FF3 /* KernelApp.swift */,
 				D2F83C08BE202570DCF2D367 /* Calendar */,
+				723E3379F1DC02759D8C9EEA /* ClaudeCode */,
 				FE3C8925905BD344A2F050F1 /* CloudView */,
 				58DAC94496C31FB2A205F84F /* DesignSystem */,
 				52BB9F891D95D85002D5E24E /* IPC */,
@@ -305,6 +319,7 @@
 				D88A92F3A0BE94C02FFD93BD /* SpendingWidget.swift in Sources */,
 				C75E111C26F08812690A866D /* StageController.swift in Sources */,
 				A241F475A27768524D95BDF2 /* Tokens.swift in Sources */,
+				22C171C6481CF99FE8AFD0C5 /* TranscriptPill.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -317,6 +332,7 @@
 				079CC7C6F258BB709F7A37AF /* FrameCodecTests.swift in Sources */,
 				7DAF4585F776F59FBE51BF75 /* MailWidgetTests.swift in Sources */,
 				0ED98BF241F2969FC4555008 /* StageControllerTests.swift in Sources */,
+				D3367F473141E5E6A42D71A1 /* TranscriptPillTests.swift in Sources */,
 				F027D3F9A182E74DF34C573C /* WidgetRenderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
