@@ -17,8 +17,16 @@ import { config, INJECT_CAP } from '../src/config.js';
 
 // --- Modules that land in Plans 01-02 / 01-03 (do not exist yet → RED) ---
 import { startIpcServer } from '../src/ipc/server.js';
-import { runTick } from '../src/loop.js';
+import { runTick, setBrain, enqueue } from '../src/loop.js';
 import { inject } from '../src/memory/inject.js';
+
+// --- Phase 3: the brain swap-seam, the cue assembler, and the gated dispatch chokepoint ---
+import type { BrainProvider, Decision } from '../src/brain/BrainProvider.js';
+import { StubBrain } from '../src/brain/StubBrain.js';
+import { assembleSpeak } from '../src/ipc/cues.js';
+import { SpeakSchema } from '../src/ipc/protocol.js';
+import { register, clearRegistry, dispatch } from '../src/tools/registry.js';
+import { z } from 'zod';
 
 /** A minimal NDJSON client: connects, splits incoming frames on '\n'. */
 function connectClient(socketPath: string): Promise<{
@@ -99,4 +107,86 @@ test('skeleton: one tick perceive→recall→decide→act→log end to end', asy
 
   client.socket.end();
   await server.close();
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3 (03-01): utterance → mock ClaudeBrain → reply over IPC, a speak frame
+// is producible from the reply, and a Decision.action reaches the gated dispatch
+// (BRAIN-06 anti-bypass — the gate stays the chokepoint).
+// ---------------------------------------------------------------------------
+
+/** A mock ClaudeBrain that returns a fixed text reply (no live SDK / network). */
+class MockReplyBrain implements BrainProvider {
+  async reason(prompt: string): Promise<Decision> {
+    return { thought: 'mock cloud reasoned', reply: `Cloud reply to: ${prompt}` };
+  }
+}
+
+/** A mock ClaudeBrain that returns ONE Decision.action (the manual tool loop shape). */
+class MockToolUseBrain implements BrainProvider {
+  async reason(): Promise<Decision> {
+    // 'screenshot' classifies Green in tiers.ts → gate allows → dispatch reaches execute.
+    return { thought: 'mock cloud wants a tool', action: { tool: 'screenshot', args: { op: 'see' } } };
+  }
+}
+
+test('03-01: utterance → mock ClaudeBrain → reply frame over IPC; speak frame producible', async () => {
+  setBrain(new MockReplyBrain());
+  const server = await startIpcServer();
+  const client = await connectClient(config.socketPath);
+  await waitFor(() => client.frames().find((f) => (f as { type?: string }).type === 'ready'));
+
+  const id = 'p3-reply-1';
+  client.socket.write(
+    JSON.stringify({ type: 'utterance', id, text: 'how is my day', final: true }) + '\n',
+  );
+  await runTick();
+  const reply = (await waitFor(() =>
+    client.frames().find((f) => (f as { type?: string; id?: string }).type === 'reply'),
+  )) as { type: string; id: string; text: string };
+  assert.equal(reply.id, id, 'reply is correlated to the utterance id');
+  assert.match(reply.text, /Cloud reply to: how is my day/, 'the mock ClaudeBrain reply is surfaced');
+
+  // A speak frame is producible from the reply via the cue assembler (CLOUD-04) and validates.
+  const speak = assembleSpeak(id, reply.text, [{ widget: 'events', phrase: 'day', data: { count: 3 } }]);
+  assert.equal(SpeakSchema.safeParse(speak).success, true, 'assembled speak frame validates against SpeakSchema');
+  assert.ok(speak.cues.length >= 1, 'the speak frame carries char-offset cues');
+
+  client.socket.end();
+  await server.close();
+  setBrain(new StubBrain()); // restore the default
+});
+
+test('03-01: a Decision.action reaches the gated dispatch (BRAIN-06 — gate is the chokepoint)', async () => {
+  // Register a sentinel tool; its execute is reachable ONLY via dispatch (after gate.authorize).
+  // Driven through the loop directly (enqueue + runTick) — no IPC server needed, which keeps the
+  // proof tight: the brain returns ONE Decision.action and the LOOP gates+executes it.
+  clearRegistry();
+  let executed = false;
+  let executedArgs: Record<string, unknown> | null = null;
+  register({
+    name: 'screenshot',
+    schema: z.object({ op: z.string() }).passthrough(),
+    async execute(args) {
+      executed = true;
+      executedArgs = args;
+      return { ok: true, data: 'captured' };
+    },
+  });
+
+  setBrain(new MockToolUseBrain());
+  enqueue({ source: 'user', id: 'p3-act-1', payload: 'show me the screen' });
+  await runTick();
+
+  assert.equal(executed, true, 'the action reached the tool via the loop’s gated dispatch (BRAIN-06)');
+  assert.deepEqual(executedArgs, { op: 'see' }, 'the brain’s Decision.action.args reached execute intact');
+
+  // Direct dispatch of the same action also proves the gate is the single entry to execute.
+  executed = false;
+  const result = await dispatch({ tool: 'screenshot', args: { op: 'see' } });
+  assert.equal(result.ok, true, 'gate.authorize allows the Green action and dispatch executes it');
+  assert.equal(executed, true, 'execute is reached only through the gated dispatch chokepoint');
+
+  clearRegistry();
+  setBrain(new StubBrain());
 });

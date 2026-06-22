@@ -20,6 +20,7 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { FrameSchema, type Frame } from './protocol.js';
 import { enqueue } from '../loop.js';
+import { applySettings } from '../settings.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
@@ -160,8 +161,13 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
     case 'ping':
       send(conn, { type: 'pong', id: frame.id });
       break;
+    case 'settings':
+      // P3 ADDITIVE arm: swap the active brain via the existing setBrain seam (settings.ts).
+      // The 7B helper is unaffected. No reply frame in P3 — the toggle is fire-and-apply.
+      applySettings(frame.brain);
+      break;
     default:
-      // hello / ui.intent / daemon-origin frames: no P1 action.
+      // hello / ui.intent / ui.state / daemon-origin frames: no action here.
       break;
   }
 }
