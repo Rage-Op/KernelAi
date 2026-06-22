@@ -11,13 +11,19 @@
 		0ED98BF241F2969FC4555008 /* StageControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16148C3EFEBBE30F2FCE9282 /* StageControllerTests.swift */; };
 		33AC917533E193EC87351912 /* BootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23763944C65D1590306AA94 /* BootstrapTests.swift */; };
 		3D603DC06ACAC7B04655DF3A /* Cue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E2D51A82AB1B4CACE1AE21 /* Cue.swift */; };
+		623812EED131A157C7B8C34B /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227343D40D493FAC0CCF6BCE /* Speaker.swift */; };
+		62CA2DAC1282964973C7B420 /* Particles.metal in Sources */ = {isa = PBXBuildFile; fileRef = C982AA0EAACC4CC3F4DE2B5A /* Particles.metal */; };
+		8594589FAE12D887683700AC /* CloudWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 962A24B4F107DB1A15EBA0EE /* CloudWindow.swift */; };
+		9D5510B23514F8FB38E72A25 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EC2621AFC72F7E6F7507D65 /* AppCoordinator.swift */; };
 		A241F475A27768524D95BDF2 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E337FF479D32228A89AC2A21 /* Tokens.swift */; };
 		A394F9FD3365C26F7AF108E8 /* KernelSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17EF899658131B94C9F042DA /* KernelSocket.swift */; };
+		B19460B5AFEA72D2B4D3C45F /* Particles.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0B90F22E877B592964F5962 /* Particles.swift */; };
 		BA2AC7AEF3EE4A747A3034D5 /* KernelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF805AA6C2148C3ABD263FF3 /* KernelApp.swift */; };
 		C75E111C26F08812690A866D /* StageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1ADCD649DA3432EADAEC68 /* StageController.swift */; };
 		C7B804AEED73EF401A504B2E /* BoundarySpike.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1ECABC73A7064F118CDB7C /* BoundarySpike.swift */; };
 		F038967A9CA01EA613799063 /* Frames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48D7F81C2056D4C22D02909D /* Frames.swift */; };
 		F2CD0BAA4669707EBF30247A /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F598C22C9E59BF99CBB93134 /* Motion.swift */; };
+		FC5FA779A37096D8CC3C88E7 /* MicEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F4EDAF801AA259DC93042F /* MicEngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,17 +37,23 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		07F4EDAF801AA259DC93042F /* MicEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicEngine.swift; sourceTree = "<group>"; };
+		0EC2621AFC72F7E6F7507D65 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		16148C3EFEBBE30F2FCE9282 /* StageControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageControllerTests.swift; sourceTree = "<group>"; };
 		17EF899658131B94C9F042DA /* KernelSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KernelSocket.swift; sourceTree = "<group>"; };
 		1E0CD605F7A5ED78342D424E /* KernelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KernelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		227343D40D493FAC0CCF6BCE /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameCodecTests.swift; sourceTree = "<group>"; };
 		48D7F81C2056D4C22D02909D /* Frames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Frames.swift; sourceTree = "<group>"; };
 		5C1ADCD649DA3432EADAEC68 /* StageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageController.swift; sourceTree = "<group>"; };
 		6031C7693DB73B68A9F6ADED /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7B5D7D7D8E4B96BA7A8ED69B /* Kernel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Kernel.entitlements; sourceTree = "<group>"; };
+		962A24B4F107DB1A15EBA0EE /* CloudWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudWindow.swift; sourceTree = "<group>"; };
 		9C9F810A2EE7CDD4B516ADEF /* Kernel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kernel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5E2D51A82AB1B4CACE1AE21 /* Cue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cue.swift; sourceTree = "<group>"; };
 		AA1ECABC73A7064F118CDB7C /* BoundarySpike.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundarySpike.swift; sourceTree = "<group>"; };
+		C982AA0EAACC4CC3F4DE2B5A /* Particles.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Particles.metal; sourceTree = "<group>"; };
+		E0B90F22E877B592964F5962 /* Particles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Particles.swift; sourceTree = "<group>"; };
 		E23763944C65D1590306AA94 /* BootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootstrapTests.swift; sourceTree = "<group>"; };
 		E337FF479D32228A89AC2A21 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		EF805AA6C2148C3ABD263FF3 /* KernelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KernelApp.swift; sourceTree = "<group>"; };
@@ -73,6 +85,15 @@
 				1E0CD605F7A5ED78342D424E /* KernelTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3E6E6E95828FD9E318201423 /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				07F4EDAF801AA259DC93042F /* MicEngine.swift */,
+				227343D40D493FAC0CCF6BCE /* Speaker.swift */,
+			);
+			path = Voice;
 			sourceTree = "<group>";
 		};
 		52BB9F891D95D85002D5E24E /* IPC */ = {
@@ -116,14 +137,27 @@
 		FBA8AD8272F433C19F1171F0 /* Kernel */ = {
 			isa = PBXGroup;
 			children = (
+				0EC2621AFC72F7E6F7507D65 /* AppCoordinator.swift */,
 				6031C7693DB73B68A9F6ADED /* Info.plist */,
 				7B5D7D7D8E4B96BA7A8ED69B /* Kernel.entitlements */,
 				EF805AA6C2148C3ABD263FF3 /* KernelApp.swift */,
+				FE3C8925905BD344A2F050F1 /* CloudView */,
 				58DAC94496C31FB2A205F84F /* DesignSystem */,
 				52BB9F891D95D85002D5E24E /* IPC */,
 				370F3EB30091DCA3907C4E74 /* Stage */,
+				3E6E6E95828FD9E318201423 /* Voice */,
 			);
 			path = Kernel;
+			sourceTree = "<group>";
+		};
+		FE3C8925905BD344A2F050F1 /* CloudView */ = {
+			isa = PBXGroup;
+			children = (
+				962A24B4F107DB1A15EBA0EE /* CloudWindow.swift */,
+				C982AA0EAACC4CC3F4DE2B5A /* Particles.metal */,
+				E0B90F22E877B592964F5962 /* Particles.swift */,
+			);
+			path = CloudView;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -208,12 +242,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9D5510B23514F8FB38E72A25 /* AppCoordinator.swift in Sources */,
 				C7B804AEED73EF401A504B2E /* BoundarySpike.swift in Sources */,
+				8594589FAE12D887683700AC /* CloudWindow.swift in Sources */,
 				3D603DC06ACAC7B04655DF3A /* Cue.swift in Sources */,
 				F038967A9CA01EA613799063 /* Frames.swift in Sources */,
 				BA2AC7AEF3EE4A747A3034D5 /* KernelApp.swift in Sources */,
 				A394F9FD3365C26F7AF108E8 /* KernelSocket.swift in Sources */,
+				FC5FA779A37096D8CC3C88E7 /* MicEngine.swift in Sources */,
 				F2CD0BAA4669707EBF30247A /* Motion.swift in Sources */,
+				62CA2DAC1282964973C7B420 /* Particles.metal in Sources */,
+				B19460B5AFEA72D2B4D3C45F /* Particles.swift in Sources */,
+				623812EED131A157C7B8C34B /* Speaker.swift in Sources */,
 				C75E111C26F08812690A866D /* StageController.swift in Sources */,
 				A241F475A27768524D95BDF2 /* Tokens.swift in Sources */,
 			);

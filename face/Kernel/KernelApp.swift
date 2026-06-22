@@ -8,31 +8,40 @@ enum KernelBundle {
     static let displayName = "Kernel"
 }
 
-/// The KERNEL Face: a single menubar-only SwiftUI app (CLOUD-01 surface).
+/// The KERNEL Face: a menubar-only SwiftUI app plus the cloud Window (CLOUD-01/05).
 ///
-/// This is the SHELL. Wave 1 (03-03) ships the menubar presence + the
-/// on-device boundary spike trigger. The full cloud window, the NWConnection
-/// UDS client, and SMAppService launch-at-login land in 03-04 (CLOUD-01/05),
-/// gated on the SPIKE-VERDICT this plan produces.
+/// 03-04 wires the full Face: the AppCoordinator owns the cloud, the dual-paced
+/// Stage, the retained-synth Speaker, the Face-local MicEngine, and the
+/// NWConnection UDS client; the CloudWindow renders the living Metal cloud and
+/// switches between full-screen and the corner pill on a `ui.state` frame.
 @main
 struct KernelApp: App {
-    /// Retained for the lifetime of the app so its delegate callbacks fire
-    /// (a local-var synthesizer never fires its delegate — Apple Forums 683471).
-    /// Wired by the boundary spike (03-03 Task 2).
+    @StateObject private var coordinator = AppCoordinator()
+    /// The boundary spike trigger remains available for the owner's manual re-run
+    /// (SPIKE-VERDICT.md §"Manual owner re-run").
     @StateObject private var spike = BoundarySpike()
 
     var body: some Scene {
+        // The cloud canvas (CLOUD-02). Full-screen ↔ corner-pill states animate inside.
+        Window("Kernel", id: "cloud") {
+            CloudWindow(coordinator: coordinator)
+                .frame(minWidth: 480, minHeight: 320)
+                .background(Tokens.canvas)
+                .onAppear { coordinator.start() }
+        }
+        .windowStyle(.hiddenTitleBar)
+
         MenuBarExtra("Kernel", systemImage: "circle.dotted") {
-            MenuBarContent(spike: spike)
+            MenuBarContent(coordinator: coordinator, spike: spike)
         }
         .menuBarExtraStyle(.window)
     }
 }
 
-/// The menubar dropdown panel. In 03-04 this gains the brain toggle, the
-/// launch-at-login switch, and connection state. For Wave 1 it carries the
-/// owner-triggerable boundary spike control (the gating manual check).
+/// The menubar dropdown panel: accent dot, connection state, the launch-at-login
+/// toggle (CLOUD-01), and the owner-triggerable boundary spike control.
 struct MenuBarContent: View {
+    @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var spike: BoundarySpike
 
     var body: some View {
@@ -43,13 +52,21 @@ struct MenuBarContent: View {
                         LinearGradient(
                             colors: [Tokens.accentIndigo, Tokens.accentCyan],
                             startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                            endPoint: .bottomTrailing))
                     .frame(width: 10, height: 10)
                 Text(KernelBundle.displayName)
                     .font(.headline)
+                Spacer()
+                Text(connectionLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+
+            Divider()
+
+            Toggle("Launch at login", isOn: Binding(
+                get: { coordinator.launchAtLogin },
+                set: { coordinator.setLaunchAtLogin($0) }))
 
             Divider()
 
@@ -58,8 +75,7 @@ struct MenuBarContent: View {
             } label: {
                 Label(
                     spike.isSpeaking ? "Speaking…" : "Run boundary spike",
-                    systemImage: "waveform"
-                )
+                    systemImage: "waveform")
             }
             .disabled(spike.isSpeaking)
 
@@ -77,6 +93,15 @@ struct MenuBarContent: View {
             .keyboardShortcut("q")
         }
         .padding(Tokens.Space.lg)
-        .frame(width: 260)
+        .frame(width: 280)
+    }
+
+    private var connectionLabel: String {
+        switch coordinator.connection {
+        case .idle: return "idle"
+        case .connecting: return "connecting…"
+        case .connected: return "connected"
+        case .failed: return "offline"
+        }
     }
 }
