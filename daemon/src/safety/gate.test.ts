@@ -12,8 +12,34 @@ import assert from 'node:assert/strict';
 
 import { authorize, type Verdict } from './gate.js';
 import type { ToolCall } from '../brain/BrainProvider.js';
+import type { Provenance } from '../memory/types.js';
+import { FLAGS } from './flags.js';
+import { createOverride } from './override.js';
+import { fakeClock, captureAudit } from './test-helpers.js';
 
-const call = (tool: string, args: Record<string, unknown>): ToolCall => ({ tool, args });
+const call = (tool: string, args: Record<string, unknown>, origin?: Provenance): ToolCall => ({
+  tool,
+  args,
+  origin,
+});
+
+/** Build an ACTIVE /override (fake clock) so the hard-rule tests run under live override. */
+function activeOverride() {
+  const ov = createOverride({ clock: fakeClock(), audit: captureAudit().audit });
+  ov.activate('test-session', 60_000);
+  return ov;
+}
+
+/** Run a block with FLAGS.breakerEnabled forced to `val`, always restoring it. */
+async function withBreakerFlag(val: boolean, fn: () => Promise<void>): Promise<void> {
+  const prev = FLAGS.breakerEnabled;
+  FLAGS.breakerEnabled = val;
+  try {
+    await fn();
+  } finally {
+    FLAGS.breakerEnabled = prev;
+  }
+}
 
 test('authorize: the credential fence denies (hard rule fires before tier classification)', async () => {
   // A type/fill into a password field would otherwise classify Yellow; the fence denies first.
@@ -78,4 +104,81 @@ test('authorize: a Red action from a Claude Code session is DENIED (shim deferre
     /Red-tier/,
     'the denial carries a Red-tier escalation for the originator',
   );
+});
+
+// --- PHASE 5: the three hard rules ABOVE /override + the SAFE-07 flag gate ---
+
+test('SAFE-04 i: the credential fence DENIES even under ACTIVE /override (overridable=false)', async () => {
+  // Even with the breaker flag ON and /override active, the credential fence fires first.
+  await withBreakerFlag(true, async () => {
+    const verdict = await authorize(
+      call('browser', { op: 'fill', fieldLabel: 'Password' }),
+      activeOverride(),
+    );
+    assert.equal(verdict.kind, 'deny', 'the credential fence denies under active override');
+    assert.match(
+      verdict.kind === 'deny' ? verdict.escalation.reason : '',
+      /secure\/credential field/,
+      'fence escalation, not a gated/allow verdict',
+    );
+  });
+});
+
+test('SAFE-04 ii: a Red action with origin=external is HARD-BLOCKED even under ACTIVE /override (poisoned email)', async () => {
+  // The test-injection "poisoned email": an external-sourced instruction that classifies Red.
+  // Even with the breaker flag ON and /override ACTIVE, it must DENY (never gated, never allowed).
+  await withBreakerFlag(true, async () => {
+    const poisoned = await authorize(
+      call('fs', { op: 'rm -rf', path: '/' }, 'external'),
+      activeOverride(),
+    );
+    assert.equal(poisoned.kind, 'deny', 'external-sourced Red is hard-blocked, NOT gated');
+    assert.equal(poisoned.tier, 'red');
+    assert.notEqual(poisoned.kind, 'gated', 'a poisoned email can NEVER reach the breaker');
+    assert.match(
+      poisoned.kind === 'deny' ? poisoned.escalation.reason : '',
+      /external content/i,
+      'the denial cites the external-content origin',
+    );
+  });
+});
+
+test('SAFE-04 ii: Red with absent/unknown origin defaults to gated (breaker, default-deny posture) — NOT auto-allowed', async () => {
+  await withBreakerFlag(true, async () => {
+    const unknown = await authorize(call('fs', { op: 'delete' }) /* no origin */, activeOverride());
+    assert.equal(unknown.kind, 'gated', 'unknown-origin Red is still gated by the breaker (suspect, not hard-blocked)');
+    assert.notEqual(unknown.kind, 'allow', 'unknown-origin Red is NEVER auto-allowed');
+  });
+});
+
+test('SAFE-07: flag OFF → Red denies (P1-P4 behaviour-preserving); flag ON + user/self origin → gated', async () => {
+  await withBreakerFlag(false, async () => {
+    const off = await authorize(call('shop', { op: 'purchase', amount: 5 }, 'user'));
+    assert.equal(off.kind, 'deny', 'flag OFF reproduces the P1-P4 Red deny');
+    assert.match(off.kind === 'deny' ? off.escalation.reason : '', /Red-tier/, 'P1-P4 escalation');
+  });
+  await withBreakerFlag(true, async () => {
+    const onUser = await authorize(call('shop', { op: 'purchase', amount: 5 }, 'user'));
+    assert.equal(onUser.kind, 'gated', 'flag ON + user origin → gated (the live breaker)');
+    const onSelf = await authorize(call('fs', { op: 'rm -rf', path: '/tmp/x' }, 'self'));
+    assert.equal(onSelf.kind, 'gated', 'flag ON + self origin → gated');
+  });
+});
+
+test('SAFE-02 defense-in-depth: ACTIVE /override does NOT change the Red decision', async () => {
+  await withBreakerFlag(true, async () => {
+    const ov = activeOverride();
+    assert.equal(ov.isActive(), true, 'override is active for this assertion');
+    const red = await authorize(call('fs', { op: 'rm -rf', path: '/tmp/y' }, 'user'), ov);
+    assert.equal(red.kind, 'gated', 'Red stays gated under active override — override never bypasses Red');
+  });
+});
+
+test('green/yellow: still allow under Phase 5 (existing shipped cases stay green; override threads friction)', async () => {
+  const green = await authorize(call('peekaboo', { op: 'click' }, 'user'), activeOverride());
+  assert.equal(green.kind, 'allow');
+  assert.equal(green.tier, 'green');
+  const yellow = await authorize(call('peekaboo', { op: 'type', fieldLabel: 'To' }, 'user'), activeOverride());
+  assert.equal(yellow.kind, 'allow');
+  assert.equal(yellow.tier, 'yellow');
 });

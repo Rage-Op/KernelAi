@@ -149,8 +149,42 @@ export const TranscriptSchema = z.object({
 });
 
 /**
+ * P5 ADDITIVE arm (SAFE-02): `/override` activation from the Face (Face→daemon). `active:true`
+ * activates the scoped capability (Green full-speed, Yellow proceed+notify) for `ttlMs`; the
+ * daemon's loop also accepts a literal "/override" utterance. NEVER unlocks Red. Appended to the
+ * frozen FrameSchema union — existing arms are NEVER mutated (mirrors P3/P4 additive arms).
+ */
+export const OverrideSchema = z.object({
+  type: z.literal('override'),
+  active: z.boolean(),
+  ttlMs: z.number().optional(),
+});
+
+/**
+ * P5 ADDITIVE arm (SAFE-03): the breaker's dry-run preview (daemon→Face). Surfaced when a Red
+ * action enters the breaker so the owner sees what/how-much/why and has the 10s cancel window.
+ * `estimatedSpend` is shown to the owner but NEVER written to the audit log (V7).
+ */
+export const BreakerPreviewSchema = z.object({
+  type: z.literal('breaker.preview'),
+  id: z.string(),
+  summary: z.string(),
+  estimatedSpend: z.number(),
+  tier: z.literal('red'),
+});
+
+/**
+ * P5 ADDITIVE arm (SAFE-03): the owner cancelling a Red action within the 10s window
+ * (Face→daemon). Correlated to the preview by `id`. The breaker aborts WITHOUT executing.
+ */
+export const BreakerCancelSchema = z.object({
+  type: z.literal('breaker.cancel'),
+  id: z.string(),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
- * plus the designed-for P2/P3 shapes. `safeParse` every incoming line against this.
+ * plus the designed-for P2/P3/P4/P5 shapes. `safeParse` every incoming line against this.
  */
 export const FrameSchema = z.discriminatedUnion('type', [
   // Face → daemon
@@ -159,6 +193,8 @@ export const FrameSchema = z.discriminatedUnion('type', [
   PingSchema,
   UiIntentSchema,
   SettingsSchema, // P3 additive (Face→daemon brain toggle)
+  OverrideSchema, // P5 additive (Face→daemon /override activation)
+  BreakerCancelSchema, // P5 additive (Face→daemon Red cancel within the 10s window)
   // daemon → Face
   ReadySchema,
   ReplySchema,
@@ -168,6 +204,7 @@ export const FrameSchema = z.discriminatedUnion('type', [
   UiStateSchema, // P3 additive (daemon→Face cloud scene state)
   ErrorSchema,
   TranscriptSchema, // P4 additive (daemon→Face Claude Code transcript)
+  BreakerPreviewSchema, // P5 additive (daemon→Face Red dry-run preview)
 ]);
 
 /** Any valid frame. */
@@ -187,6 +224,9 @@ export type WidgetData = z.infer<typeof WidgetDataSchema>;
 export type UiState = z.infer<typeof UiStateSchema>;
 export type ErrorFrame = z.infer<typeof ErrorSchema>;
 export type Transcript = z.infer<typeof TranscriptSchema>;
+export type Override = z.infer<typeof OverrideSchema>;
+export type BreakerPreview = z.infer<typeof BreakerPreviewSchema>;
+export type BreakerCancel = z.infer<typeof BreakerCancelSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

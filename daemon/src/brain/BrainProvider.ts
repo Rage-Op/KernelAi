@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ContextItem } from '../memory/types.js';
+import type { ContextItem, Provenance } from '../memory/types.js';
 
 /**
  * The brain swap-seam (spec §6). Built FIRST, before any implementation (BRAIN-01).
@@ -11,6 +11,15 @@ import type { ContextItem } from '../memory/types.js';
 export interface ToolCall {
   tool: string;
   args: Record<string, unknown>;
+  /**
+   * Provenance taint of the INSTRUCTION that produced this action (SAFE-04 ii, Phase 5).
+   * Stamped at the brain-decision site: `user`/`self` for a trusted intent, `external` when the
+   * driving context traced to a `source:external` item. The gate HARD-BLOCKS `tier==='red' &&
+   * origin==='external'` ABOVE /override and the breaker. ADDITIVE + optional — when absent, a Red
+   * action is treated as suspect (default-deny posture) and still gated by the breaker; the
+   * external block fires ONLY on an explicit `origin==='external'`.
+   */
+  origin?: Provenance;
 }
 
 /** The structured output of a single reasoning pass. */
@@ -52,6 +61,8 @@ export interface BrainProvider {
 export const ToolCallSchema = z.object({
   tool: z.string(),
   args: z.record(z.string(), z.unknown()),
+  // Phase 5 ADDITIVE: optional provenance taint, validated when present (SAFE-04 ii).
+  origin: z.enum(['user', 'self', 'external']).optional(),
 });
 
 export const DecisionSchema = z.object({

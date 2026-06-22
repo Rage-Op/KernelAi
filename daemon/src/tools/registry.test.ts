@@ -11,8 +11,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 
-import { register, dispatch, clearRegistry } from './registry.js';
+import { register, dispatch, clearRegistry, setBreakerDeps } from './registry.js';
 import type { Tool, ToolResult } from './Tool.js';
+import { FLAGS } from '../safety/flags.js';
+import type { BreakerDeps } from '../safety/breaker.js';
 
 /** A stub tool whose execute flips `reached` so "execute was reached" is assertable. */
 function stubTool(overrides: Partial<Tool> = {}): { tool: Tool; reached: () => boolean } {
@@ -102,4 +104,92 @@ test('registry: invalid args (failing the tool zod schema) are rejected before e
   assert.equal(result.ok, false, 'invalid args are rejected');
   assert.match(result.escalation?.reason ?? '', /invalid tool args/, 'structured invalid-args escalation');
   assert.equal(reached(), false, 'execute is not reached when args fail validation');
+});
+
+// --- PHASE 5: the `gated` arm routes to breaker.run (mock breakerDeps), NOT plain execute ---
+
+/** Run a block with FLAGS.breakerEnabled forced ON, always restoring it + clearing the deps. */
+async function withBreakerEnabled(fn: () => Promise<void>): Promise<void> {
+  const prev = FLAGS.breakerEnabled;
+  FLAGS.breakerEnabled = true;
+  try {
+    await fn();
+  } finally {
+    FLAGS.breakerEnabled = prev;
+    setBreakerDeps(null); // restore the real wiring for any later-ordered test.
+  }
+}
+
+test('registry: a GATED (Red) verdict routes to breaker.run with the injected deps, never plain execute', async () => {
+  await withBreakerEnabled(async () => {
+    clearRegistry();
+    // The tool's OWN execute must NOT be reached via the plain allow path for a gated call —
+    // only via the breaker's injected `execute` dep (mocked here). We assert the breaker ran.
+    const { tool, reached } = stubTool({ name: 'fs', schema: z.object({ op: z.string() }) });
+    register(tool);
+
+    let breakerEntered = false;
+    let breakerExecuteCalled = false;
+    const mockDeps: BreakerDeps = {
+      clock: { now: () => 0, sleep: async () => {} },
+      cancelled: () => false,
+      emitPreview: () => {
+        breakerEntered = true;
+      },
+      ledger: {
+        checkAndReserve: () => ({ ok: true, reserved: 0, ceiling: 100, totalReserved: 0 }),
+        release: () => {},
+        dayReset: () => {},
+      },
+      audit: () => {},
+      execute: async () => {
+        breakerExecuteCalled = true;
+        return { ok: true, data: { viaBreaker: true } };
+      },
+      reReadState: async () => 'stable',
+      windowMs: 0, // window already elapsed → straight to ceiling/TOCTOU/execute.
+    };
+    setBreakerDeps(mockDeps);
+
+    // origin user + Red op (delete) → gate returns { kind:'gated' } → dispatch runs breaker.run.
+    const result = await dispatch({ tool: 'fs', args: { op: 'delete' }, origin: 'user' });
+
+    assert.equal(breakerEntered, true, 'the breaker was entered (a preview was emitted)');
+    assert.equal(breakerExecuteCalled, true, 'the breaker, not the plain path, drove execute');
+    assert.equal(result.ok, true, 'the breaker proceed path returned success');
+    assert.deepEqual(result.data, { viaBreaker: true }, 'the result came from the breaker execute');
+    assert.equal(reached(), false, 'the tool.execute plain path was NOT reached (gated did not fall through)');
+  });
+});
+
+test('registry: a GATED cancel aborts via the breaker — the tool action never runs', async () => {
+  await withBreakerEnabled(async () => {
+    clearRegistry();
+    const { tool } = stubTool({ name: 'fs', schema: z.object({ op: z.string() }) });
+    register(tool);
+
+    let executed = false;
+    const mockDeps: BreakerDeps = {
+      clock: { now: () => 0, sleep: async () => {} },
+      cancelled: () => true, // owner cancels immediately.
+      emitPreview: () => {},
+      ledger: {
+        checkAndReserve: () => ({ ok: true, reserved: 0, ceiling: 100, totalReserved: 0 }),
+        release: () => {},
+        dayReset: () => {},
+      },
+      audit: () => {},
+      execute: async () => {
+        executed = true;
+        return { ok: true };
+      },
+      reReadState: async () => 'stable',
+      windowMs: 1000,
+    };
+    setBreakerDeps(mockDeps);
+
+    const result = await dispatch({ tool: 'fs', args: { op: 'rm -rf', path: '/' }, origin: 'user' });
+    assert.equal(result.ok, false, 'a cancelled gated action returns an escalation');
+    assert.equal(executed, false, 'the breaker NEVER executed the cancelled action');
+  });
 });

@@ -13,12 +13,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { enqueue, drain, runTick, isRunning, queueDepth, setBrain, type Intent } from './loop.js';
+import { enqueue, drain, runTick, isRunning, queueDepth, setBrain, parseOverrideCommand, type Intent } from './loop.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { z } from 'zod';
 import type { BrainProvider, Decision, ToolCall } from './brain/BrainProvider.js';
 import { register, clearRegistry } from './tools/registry.js';
 import type { Tool, ToolResult } from './tools/Tool.js';
+import { overrideSingleton } from './safety/override.js';
 
 /** A temp memory dir with the minimum inject() needs: IDENTITY.md, current.md, logs/. */
 function tempMemoryDir(): string {
@@ -160,5 +161,74 @@ test('loop: a gate-denied action surfaces a Blocked reply and the tool never exe
 
   // restore the StubBrain so any later-ordered tests are unaffected.
   setBrain(new StubBrain());
+  clearRegistry();
+});
+
+// --- PHASE 5: /override is parsed as a LITERAL command BEFORE the brain (T-05-05) ---
+
+/** A brain that records whether reason() was ever called (to prove /override short-circuits it). */
+class SpyBrain implements BrainProvider {
+  called = false;
+  async reason(prompt: string): Promise<Decision> {
+    this.called = true;
+    return { thought: 'spy', reply: `spy: ${prompt}` };
+  }
+}
+
+test('loop: a literal "/override" utterance activates override WITHOUT reaching the brain', async () => {
+  const spy = new SpyBrain();
+  setBrain(spy);
+  overrideSingleton().deactivate();
+
+  const memoryDir = tempMemoryDir();
+  const replies: string[] = [];
+  enqueue({ source: 'user', id: 'ov-1', payload: '/override', memoryDir, reply: (t) => replies.push(t) });
+  await runTick();
+
+  assert.equal(spy.called, false, 'the brain.reason() was NEVER reached for an /override command');
+  assert.equal(overrideSingleton().isActive(), true, 'override was activated by the literal command');
+  assert.equal(replies.length, 1, 'a confirmation reply was surfaced');
+  assert.match(replies[0], /Override active/i, 'the reply confirms activation');
+  assert.match(replies[0], /Red stays gated/i, 'the reply states Red remains gated');
+
+  setBrain(new StubBrain());
+  overrideSingleton().deactivate();
+});
+
+test('loop: parseOverrideCommand only fires for a USER utterance (external content can never activate)', () => {
+  // A user utterance starting with the literal command → parsed.
+  assert.notEqual(parseOverrideCommand({ source: 'user', payload: '/override' }), null, 'user /override parses');
+  assert.notEqual(parseOverrideCommand({ source: 'user', payload: 'override now' }), null, 'user "override" parses');
+  // A non-user source (schedule/tool) is NOT an override command, even with identical text.
+  assert.equal(parseOverrideCommand({ source: 'schedule', payload: '/override' }), null, 'schedule cannot activate');
+  assert.equal(parseOverrideCommand({ source: 'tool', payload: '/override' }), null, 'tool cannot activate');
+  // The command must be at the START — quoting it inside a sentence does not trigger.
+  assert.equal(
+    parseOverrideCommand({ source: 'user', payload: 'please do not /override anything' }),
+    null,
+    'a mid-sentence mention does not activate override',
+  );
+});
+
+test('loop: active /override does NOT change the Red decision — a Red action is still Blocked (defense-in-depth)', async () => {
+  // Activate override, then drive a Red action through the loop with the flag OFF (default).
+  // The gate must still DENY Red (override never bypasses Red), surfacing a Blocked reply.
+  clearRegistry();
+  const { tool, reached } = stubTool('fs');
+  register(tool);
+  overrideSingleton().activate('session', 60_000);
+  setBrain(new ActionBrain({ tool: 'fs', args: { op: 'rm -rf', path: '/' } }));
+
+  const memoryDir = tempMemoryDir();
+  const replies: string[] = [];
+  enqueue({ source: 'user', id: 'ov-red-1', payload: 'delete it', memoryDir, reply: (t) => replies.push(t) });
+  await runTick();
+
+  assert.equal(reached(), false, 'the Red action never reached execute even under active override');
+  assert.equal(replies.length, 1, 'a Blocked reply was surfaced');
+  assert.match(replies[0], /^Blocked:/, 'override did NOT unlock the Red action');
+
+  setBrain(new StubBrain());
+  overrideSingleton().deactivate();
   clearRegistry();
 });
