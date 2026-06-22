@@ -130,7 +130,11 @@ export async function dispatch(call: ToolCall): Promise<ToolResult> {
   //    dep (real wiring) and gates dry-run → 10s cancel → ceiling → audit → TOCTOU → execute.
   if (verdict.kind === 'gated') {
     const breakerDeps = injectedBreakerDeps ?? (await defaultBreakerDeps(tool));
-    return runBreaker(call, breakerDeps);
+    const result = await runBreaker(call, breakerDeps);
+    // SAFE-06: mark a non-success breaker outcome as a Red gate so the obstacle ladder SKIPS its
+    // retry rungs (a Red gate belongs to the breaker/Pravin, never the retry loop). A successful
+    // breaker proceed (executor ran) is NOT marked — it is a normal success.
+    return result.ok ? result : { ...result, gated: true };
   }
 
   // 6. ASVS V5 — validate args against the tool's zod schema before execute (allow path only).

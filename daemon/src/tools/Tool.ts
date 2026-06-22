@@ -28,6 +28,13 @@ export interface ToolResult {
   data?: unknown;
   /** Set when ok=false: a structured escalation (e.g. permission missing, credential fence). */
   escalation?: { reason: string; recommendation?: string };
+  /**
+   * Phase 5 (SAFE-06) ADDITIVE marker: set `true` when this result is a Red gate/deny verdict the
+   * breaker (or gate) escalated — a chokepoint decision that belongs to Pravin, NOT a transient
+   * obstacle. The obstacle ladder reads this to SKIP the retry rungs and escalate immediately (Red
+   * gates never enter the ladder). Optional + absent by default; existing consumers ignore it.
+   */
+  gated?: boolean;
 }
 
 export interface Tool {
