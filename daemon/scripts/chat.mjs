@@ -10,7 +10,8 @@
  *     daemon's `stats` frame;
  *   - running session totals.
  *
- * Slash commands: /help /stats /tools /models /memory /brain [cloud|local] /clear /quit
+ * Slash commands: /context /usage /compact /help /stats /tools /models /memory /brain /clear /quit
+ *   /context /usage /compact are daemon-side (also reachable by just asking in plain words).
  *
  * Usage:  node daemon/scripts/chat.mjs      (or: npm run chat)
  * Env:    KERNEL_SOCKET, OLLAMA_HOST (default http://localhost:11434), KERNEL_MEMORY_DIR
@@ -144,7 +145,7 @@ function banner() {
   out(`\n${dim('╭─')} ${bold('KERNEL')} ${dim('· ' + caps.daemon + ' v' + caps.version)} ${rule(40)}`);
   for (const [k, v] of rows) out(`  ${cyan(k.padEnd(8))} ${v}`);
   out(`${dim('╰')}${rule(61)}`);
-  out(dim('  commands: /stats /tools /models /memory /brain [cloud|local] /clear /help /quit\n'));
+  out(dim('  commands: /context /usage /compact /stats /tools /models /memory /brain /clear /help /quit\n'));
 }
 
 function statsLine(s) {
@@ -227,7 +228,10 @@ function showMemory() {
 function showHelp() {
   out(`\n  ${bold('KERNEL chat — commands')}`);
   const cmds = [
-    ['/stats', 'session token/cost/throughput totals'],
+    ['/context', 'what KERNEL assembles into the prompt (daemon)'],
+    ['/usage [reset]', 'cumulative session tokens/cost (daemon)'],
+    ['/compact [focus]', 'condense working memory; optional focus (daemon)'],
+    ['/stats', 'this CLI session\'s token/cost/throughput totals'],
     ['/tools', 'registered tools + integrations'],
     ['/models', 'installed Ollama models'],
     ['/memory', 'KERNEL memory store breakdown'],
@@ -236,6 +240,8 @@ function showHelp() {
     ['/quit', 'exit'],
   ];
   for (const [c, d] of cmds) out(`    ${green(c.padEnd(20))} ${dim(d)}`);
+  out(dim('\n  Or just ask in plain words — "what\'s in your context", "how much have I used",'));
+  out(dim('  "compact the conversation" all work too.'));
   out('');
 }
 
@@ -277,7 +283,10 @@ async function onFrame(f) {
       banner();
       break;
     case 'reply':
-      out(`${mag('kernel ›')} ${f.text}`);
+      // Multi-line replies are meta-command reports (context/usage/compact) — print as a block.
+      // A single-line reply is a normal answer — prefix it with the kernel marker.
+      if (f.text.includes('\n')) out('\n' + f.text + '\n');
+      else out(`${mag('kernel ›')} ${f.text}`);
       break;
     case 'stats': {
       lastStats = f;
@@ -309,6 +318,11 @@ conn.on('error', (err) => {
 });
 conn.on('close', () => { process.stdout.write(dim('\n[connection closed]\n')); process.exit(0); });
 
+/** Forward a daemon-side meta-command (e.g. "/context") as an utterance; reply renders as a block. */
+function sendCommand(commandText) {
+  conn.write(JSON.stringify({ type: 'utterance', id: `cli-${++seq}`, text: commandText, final: true }) + '\n');
+}
+
 // ── REPL ──────────────────────────────────────────────────────────────────────
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: bold('you › ') });
 
@@ -317,7 +331,10 @@ rl.on('line', async (input) => {
   if (!text) return rl.prompt();
 
   if (text.startsWith('/')) {
-    const [cmd, arg] = text.slice(1).split(/\s+/);
+    const body = text.slice(1);
+    const cmd = (body.split(/\s+/)[0] || '').toLowerCase();
+    const arg = body.split(/\s+/)[1] || '';
+    const rest = body.slice(cmd.length).trim(); // full remainder (compact focus instructions)
     switch (cmd) {
       case 'quit': case 'exit': return rl.close();
       case 'help': showHelp(); break;
@@ -338,6 +355,16 @@ rl.on('line', async (input) => {
         if (caps) caps.brain = b;
         break;
       }
+      // Daemon-side meta-commands (context/usage/compact). Forwarded verbatim as an utterance — the
+      // daemon's loop parses the leading slash before the brain and replies with a plain-text report.
+      // Routing the typed command through the same path as natural language keeps ONE source of truth.
+      case 'context': case 'ctx':
+        sendCommand('/context'); break;
+      case 'usage': case 'cost': case 'tokens':
+        sendCommand(`/usage${rest && cmd === 'usage' ? ' ' + rest : ''}`); break;
+      case 'compact': case 'condense':
+        out(dim('  compacting working memory …'));
+        sendCommand(`/compact${rest ? ' ' + rest : ''}`); break;
       default: out(dim(`  unknown command: /${cmd}  — try /help`));
     }
     rl.prompt();

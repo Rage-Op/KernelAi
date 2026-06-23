@@ -23,6 +23,7 @@ import { inject } from './memory/inject.js';
 import { logSession } from './memory/log.js';
 import { dispatch } from './tools/registry.js';
 import { overrideSingleton } from './safety/override.js';
+import { parseCommand, runCommand } from './commands/registry.js';
 
 /** A unit of work for the loop. `reply` surfaces the brain's text to the originator. */
 export interface Intent {
@@ -146,6 +147,21 @@ export function drain(): Promise<void> {
           }
           logSession({ intent, decision: { thought: 'override activated', reply: 'override' } }, intent.memoryDir);
           continue; // do NOT reach the brain for an override command.
+        }
+
+        // META-COMMAND parse, BEFORE brain.reason() — same trusted-user-only short-circuit as
+        // /override (a poisoned email is injected DATA, never the utterance, so it can't fire one).
+        // `context`/`usage`/`compact` are deterministic introspection: running them in code gives an
+        // exact, instant answer instead of hoping the model decides to emit the right tool call.
+        const command = parseCommand(promptFor(intent), intent.source);
+        if (command) {
+          const text = await runCommand(command, { memoryDir: intent.memoryDir, brain });
+          if (intent.reply) intent.reply(text);
+          logSession(
+            { intent, decision: { thought: `meta-command:${command.name}`, reply: text } },
+            intent.memoryDir,
+          );
+          continue; // do NOT reach the brain for a meta-command.
         }
 
         // recall: assemble IDENTITY-first context under the 16K cap.

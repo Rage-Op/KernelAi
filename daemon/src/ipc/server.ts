@@ -24,6 +24,8 @@ import type { BrainUsage } from '../brain/BrainProvider.js';
 import { applySettings, currentBrainSelection } from '../settings.js';
 import { signalBreakerCancel, setBreakerBroadcast, listTools } from '../tools/registry.js';
 import { overrideSingleton } from '../safety/override.js';
+import { CLOUD_PRICE_PER_TOKEN } from '../brain/pricing.js';
+import { recordTurn } from '../commands/session-usage.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
@@ -41,9 +43,6 @@ const INTEGRATIONS = [
   'Claude Code (delegated coding sessions)',
   'whisper.cpp (speech-to-text)',
 ];
-
-/** Cloud pricing (USD per token) for est. cost when the cloud brain reports usage. opus-4-8 rates. */
-const CLOUD_PRICE_PER_TOKEN = { input: 5 / 1_000_000, output: 25 / 1_000_000 };
 
 /** Build the capabilities snapshot pushed to a client on connect. */
 function buildCapabilities(): Frame {
@@ -273,7 +272,13 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
         payload: frame.text,
         reply: (text: string) => send(conn, { type: 'reply', id: frame.id, text }),
         // Per-turn telemetry → a stats frame the client renders under the answer (tokens/sec, cost…).
-        onUsage: (usage) => send(conn, statsFromUsage(frame.id, usage)),
+        // The same stats also feed the daemon's cumulative session accumulator so the `usage`
+        // meta-command (and a natural-language "how much have I used") can report authoritative totals.
+        onUsage: (usage) => {
+          const stats = statsFromUsage(frame.id, usage);
+          recordTurn(stats);
+          send(conn, stats);
+        },
       });
       break;
     case 'ping':
