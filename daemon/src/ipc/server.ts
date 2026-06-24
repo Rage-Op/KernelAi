@@ -27,6 +27,8 @@ import { overrideSingleton } from '../safety/override.js';
 import { CLOUD_PRICE_PER_TOKEN } from '../brain/pricing.js';
 import { recordTurn } from '../commands/session-usage.js';
 import { conversation } from '../memory/conversation.js';
+import { exitIfStale } from '../build-stamp.js';
+import { logger } from '../memory/log.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
@@ -241,6 +243,10 @@ export function startIpc(
   });
 
   const server = net.createServer((conn) => {
+    // MAINT-04: if dist was rebuilt since this process booted, a launchd-owned daemon exits here so
+    // launchd relaunches it on the fresh code (automating the rebuild+kickstart). A no-op unless
+    // genuinely stale; in dev/test (no build stamp) it never triggers.
+    exitIfStale(logger);
     conn.setEncoding('utf8');
     clients.add(conn);
     send(conn, { type: 'ready', daemon: DAEMON_NAME, version: DAEMON_VERSION });

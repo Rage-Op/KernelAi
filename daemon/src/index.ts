@@ -15,6 +15,7 @@
  */
 import { config } from './config.js';
 import { logger } from './memory/log.js';
+import { bootBuildStamp } from './build-stamp.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import { startIpcServer, probeDaemonAlive } from './ipc/server.js';
 import { applySettings, loadPersistedBrain } from './settings.js';
@@ -106,7 +107,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // restored. Best-effort; an absent/empty log just starts fresh.
   conversation.load();
   const ipc = await startIpcServer();
-  logger.info({ socketPath: config.socketPath }, 'KERNEL daemon online — IPC listening');
+  // Log exactly which build is live (MAINT-04) — so "am I running stale code?" is answerable from
+  // the logs, and the connection-time staleness check has a baseline to compare against.
+  logger.info(
+    { socketPath: config.socketPath, build: bootBuildStamp() },
+    'KERNEL daemon online — IPC listening',
+  );
 
   // Keep the process resident; gracefully close the socket on termination signals.
   const shutdown = (signal: string) => {
