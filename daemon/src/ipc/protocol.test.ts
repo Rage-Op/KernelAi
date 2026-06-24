@@ -47,6 +47,39 @@ test('protocol: tool.activity frame round-trips (additive, daemon→Face backgro
   );
 });
 
+test('protocol: control-surface frames round-trip (additive — override.state / settings / audit)', () => {
+  // daemon→Face override.state (active with scope+expiry, and the inactive shape)
+  assert.equal(
+    FrameSchema.safeParse({ type: 'override.state', active: true, scope: 'face-override', expiresAt: 123 }).success,
+    true,
+  );
+  assert.equal(FrameSchema.safeParse({ type: 'override.state', active: false }).success, true, 'scope/expiry optional');
+  // Face→daemon settings.update (every field optional — one toggle at a time)
+  assert.equal(FrameSchema.safeParse({ type: 'settings.update', breakerEnabled: true }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'settings.update', dailySpendCeiling: 25, defaultTtlMs: 120000 }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'settings.update' }).success, true, 'all fields optional');
+  // daemon→Face settings.state (all required)
+  assert.equal(
+    FrameSchema.safeParse({ type: 'settings.state', breakerEnabled: false, dailySpendCeiling: 0, defaultTtlMs: 600000 }).success,
+    true,
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'settings.state', breakerEnabled: false }).success,
+    false,
+    'settings.state requires ceiling + ttl',
+  );
+  // audit.query / audit.data
+  assert.equal(FrameSchema.safeParse({ type: 'audit.query', id: 'q1', limit: 50 }).success, true);
+  assert.equal(
+    FrameSchema.safeParse({
+      type: 'audit.data',
+      id: 'q1',
+      entries: [{ tool: 'shell', outcome: 'executed', ts: '2026-06-24T10:00:00.000Z' }],
+    }).success,
+    true,
+  );
+});
+
 test('protocol: history.request / history.data round-trip (additive, persisted chat history)', () => {
   // Face→daemon request (limit optional).
   assert.equal(FrameSchema.safeParse({ type: 'history.request', id: 'h1', limit: 50 }).success, true);

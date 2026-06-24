@@ -24,6 +24,8 @@ import type { BrainUsage } from '../brain/BrainProvider.js';
 import { applySettings, currentBrainSelection } from '../settings.js';
 import { signalBreakerCancel, setBreakerBroadcast, listTools } from '../tools/registry.js';
 import { overrideSingleton } from '../safety/override.js';
+import { applyOwnerConfig, ownerConfig, defaultOverrideTtlMs } from '../safety/owner-config.js';
+import { readAudit, defaultAuditPath } from '../safety/audit.js';
 import { CLOUD_PRICE_PER_TOKEN } from '../brain/pricing.js';
 import { recordTurn } from '../commands/session-usage.js';
 import { conversation } from '../memory/conversation.js';
@@ -57,6 +59,22 @@ function buildCapabilities(): Frame {
     injectCap: config.injectCap,
     tools: listTools(),
     integrations: INTEGRATIONS,
+  };
+}
+
+/** Build the live `/override` state frame (the Face's status pill + countdown source). */
+function buildOverrideState(): Frame {
+  return { type: 'override.state', ...overrideSingleton().snapshot() };
+}
+
+/** Build the current owner safety-posture frame (the Settings page's source of truth). */
+function buildSettingsState(): Frame {
+  const cfg = ownerConfig();
+  return {
+    type: 'settings.state',
+    breakerEnabled: cfg.breakerEnabled,
+    dailySpendCeiling: cfg.dailySpendCeiling,
+    defaultTtlMs: cfg.defaultTtlMs,
   };
 }
 
@@ -253,6 +271,11 @@ export function startIpc(
     // Push the runtime capabilities right after ready so a client can render its dashboard
     // immediately (brain, context cap, tools, integrations). A client that ignores it is unaffected.
     send(conn, buildCapabilities());
+    // Then the control-surface state (SAFE-08): the live /override state (status pill + countdown)
+    // and the current owner safety posture (Settings toggles + spend ceiling). A client that ignores
+    // them is unaffected; both are also broadcast on change so the Face never polls.
+    send(conn, buildOverrideState());
+    send(conn, buildSettingsState());
     attachReader(conn, onFrame);
     const drop = () => clients.delete(conn);
     conn.on('close', drop);
@@ -339,12 +362,35 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
       // P5 ADDITIVE arm (SAFE-02): the Face activates/deactivates the scoped /override
       // capability. NEVER unlocks Red (override.allows('red') is structurally {gated:true}).
       if (frame.active) {
-        // Default 10 min if the Face omits a ttl; the capability auto-expires on its own clock.
-        overrideSingleton().activate('face-override', frame.ttlMs ?? 600_000);
+        // Use the Face's ttl, else the owner's persisted default; the capability auto-expires.
+        overrideSingleton().activate('face-override', frame.ttlMs ?? defaultOverrideTtlMs());
       } else {
         overrideSingleton().deactivate();
       }
+      // Broadcast the new state so EVERY Face updates its status pill + countdown immediately.
+      broadcast(buildOverrideState());
       break;
+    case 'settings.update': {
+      // ADDITIVE arm (SAFE-08): update the owner safety posture (breaker on/off, spend ceiling,
+      // override TTL), persist it, and echo the new state to every Face. Undefined fields are left
+      // untouched (one toggle at a time). Enabling the breaker only makes Red REACHABLE — the
+      // preview/cancel + ceiling + audit still gate every Red action.
+      applyOwnerConfig({
+        breakerEnabled: frame.breakerEnabled,
+        dailySpendCeiling: frame.dailySpendCeiling,
+        defaultTtlMs: frame.defaultTtlMs,
+      });
+      broadcast(buildSettingsState());
+      break;
+    }
+    case 'audit.query': {
+      // ADDITIVE arm (SAFE-08): the Activity view asks for the recent audit entries. Read the
+      // append-only log and reply with the SAFE projection only (tool/outcome/ts — never the hash,
+      // args, or any finance amount). Read-only; correlated by `id`.
+      const entries = readAudit(defaultAuditPath(config.memoryDir), frame.limit ?? 200);
+      send(conn, { type: 'audit.data', id: frame.id, entries });
+      break;
+    }
     case 'breaker.cancel':
       // P5 ADDITIVE arm (SAFE-03): the owner cancelled a Red action within the 10s window.
       // Flip the breaker's cancel latch (the in-flight gated run polls it and aborts WITHOUT

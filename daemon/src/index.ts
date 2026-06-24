@@ -19,6 +19,7 @@ import { bootBuildStamp } from './build-stamp.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import { startIpcServer, probeDaemonAlive } from './ipc/server.js';
 import { applySettings, loadPersistedBrain } from './settings.js';
+import { restoreOwnerConfig } from './safety/owner-config.js';
 import { conversation } from './memory/conversation.js';
 import { registerBuiltinTools } from './tools/register-builtins.js';
 import { runHeartbeat } from './heartbeat.js';
@@ -102,6 +103,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // out of the box — NOT the StubBrain placeholder or a keyless cloud brain (the "it's dumb /
   // won't use tools" report). persist=false: the value already came from disk (or is the default).
   applySettings(loadPersistedBrain() ?? 'local', false);
+  // Restore the owner's persisted SAFETY posture (SAFE-08): the Red breaker on/off flag, the daily
+  // spend ceiling, and the /override default TTL. Syncs the live gate flag (FLAGS.breakerEnabled) so
+  // the gate honours the owner's choice; a fresh install keeps the safe env/default (breaker OFF).
+  restoreOwnerConfig();
   // Restore the recent dialogue from the durable transcript so the model CONTINUES the conversation
   // across daemon restarts (the persisted-chat-history fix). Only turns after the last /clear are
   // restored. Best-effort; an absent/empty log just starts fresh.

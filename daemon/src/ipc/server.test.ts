@@ -12,8 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 
-import { startIpc, send, type FrameHandler } from './server.js';
+import { startIpc, startIpcServer, send, type FrameHandler } from './server.js';
 import type { Frame } from './protocol.js';
+import { __setOwnerConfigPathForTest } from '../safety/owner-config.js';
+import { FLAGS } from '../safety/flags.js';
 
 function tempSocket(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-sock-'));
@@ -143,4 +145,53 @@ test('server: an invalid (schema-failing) frame replies with an error frame', as
 
   client.socket.end();
   await srv.close();
+});
+
+test('server (control surface): pushes override.state + settings.state on connect, and handles update/query/override', async () => {
+  const sock = tempSocket();
+  const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-srvcfg-'));
+  __setOwnerConfigPathForTest(path.join(cfgDir, 'safety-config.json'));
+  const flagBefore = FLAGS.breakerEnabled;
+  const srv = await startIpcServer(sock); // the DEFAULT loop-connected handler
+  const client = await connectClient(sock);
+  try {
+    // (1) connect pushes the control-surface state unprompted.
+    const os0 = (await waitFor(() => client.frames().find((f) => f.type === 'override.state'))) as {
+      active: boolean;
+    };
+    assert.equal(os0.active, false, 'no override active on a fresh connect');
+    await waitFor(() => client.frames().find((f) => f.type === 'settings.state'));
+
+    // (2) settings.update flips the breaker + ceiling → echoed settings.state + live flag synced.
+    client.socket.write(JSON.stringify({ type: 'settings.update', breakerEnabled: true, dailySpendCeiling: 30 }) + '\n');
+    const ss = (await waitFor(() =>
+      client.frames().find((f) => f.type === 'settings.state' && (f as { breakerEnabled: boolean }).breakerEnabled === true),
+    )) as { breakerEnabled: boolean; dailySpendCeiling: number };
+    assert.equal(ss.breakerEnabled, true);
+    assert.equal(ss.dailySpendCeiling, 30);
+    assert.equal(FLAGS.breakerEnabled, true, 'the live gate flag followed the owner toggle');
+
+    // (3) audit.query is answered with an audit.data frame (empty is fine — no Red actions yet).
+    client.socket.write(JSON.stringify({ type: 'audit.query', id: 'q1' }) + '\n');
+    const ad = (await waitFor(() => client.frames().find((f) => f.type === 'audit.data'))) as {
+      id: string;
+      entries: unknown[];
+    };
+    assert.equal(ad.id, 'q1');
+    assert.ok(Array.isArray(ad.entries));
+
+    // (4) override activation broadcasts an active override.state with a future expiry.
+    client.socket.write(JSON.stringify({ type: 'override', active: true, ttlMs: 5000 }) + '\n');
+    const osActive = (await waitFor(() =>
+      client.frames().find((f) => f.type === 'override.state' && (f as { active: boolean }).active === true),
+    )) as { active: boolean; expiresAt?: number };
+    assert.equal(osActive.active, true);
+    assert.ok((osActive.expiresAt ?? 0) > 0, 'an active override carries an expiry to count down to');
+  } finally {
+    FLAGS.breakerEnabled = flagBefore;
+    __setOwnerConfigPathForTest(null);
+    client.socket.end();
+    await srv.close();
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+  }
 });

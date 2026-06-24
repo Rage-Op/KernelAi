@@ -305,6 +305,73 @@ export const HistoryDataSchema = z.object({
 });
 
 /**
+ * ADDITIVE arm (daemon→Face): the live `/override` state, broadcast on activate/deactivate and once
+ * on connect, so the Face can render an override status pill + a live countdown WITHOUT polling.
+ * `active:false` means no override is in effect (scope/expiresAt then meaningless). `expiresAt` is a
+ * millisecond epoch the Face counts down to. NEVER reflects a Red bypass — override cannot unlock
+ * Red (override.ts). Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const OverrideStateSchema = z.object({
+  type: z.literal('override.state'),
+  active: z.boolean(),
+  scope: z.string().optional(),
+  expiresAt: z.number().optional(),
+});
+
+/**
+ * ADDITIVE arm (Face→daemon): update the owner-configurable safety posture (SAFE-08). Every field
+ * is optional so the Face can change one toggle at a time. `breakerEnabled` flips the live Red
+ * breaker; `dailySpendCeiling` sets the breaker's daily reserve ceiling (USD); `defaultTtlMs` sets
+ * the /override default duration. The daemon persists the change and echoes the new `settings.state`.
+ */
+export const SettingsUpdateSchema = z.object({
+  type: z.literal('settings.update'),
+  breakerEnabled: z.boolean().optional(),
+  dailySpendCeiling: z.number().optional(),
+  defaultTtlMs: z.number().optional(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): the current owner safety posture, broadcast on connect and after a
+ * `settings.update`, so the Settings page can render the toggles + spend ceiling from the daemon's
+ * truth (never a stale local guess).
+ */
+export const SettingsStateSchema = z.object({
+  type: z.literal('settings.state'),
+  breakerEnabled: z.boolean(),
+  dailySpendCeiling: z.number(),
+  defaultTtlMs: z.number(),
+});
+
+/**
+ * ADDITIVE arm (Face→daemon): request the recent audit log (the Activity view). `limit` caps how
+ * many recent entries to return (default applied daemon-side). Correlated to `audit.data` by `id`.
+ */
+export const AuditQuerySchema = z.object({
+  type: z.literal('audit.query'),
+  id: z.string(),
+  limit: z.number().optional(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): the recent audit entries answering an `audit.query` (same `id`), most
+ * recent last. Each entry is the SAFE shape only — tool name, terminal outcome, ISO timestamp. NEVER
+ * the content hash, args, or any finance amount (V7 — the audit log never holds finance PII, and the
+ * Face never needs more than what/when/outcome).
+ */
+export const AuditDataSchema = z.object({
+  type: z.literal('audit.data'),
+  id: z.string(),
+  entries: z.array(
+    z.object({
+      tool: z.string(),
+      outcome: z.string(),
+      ts: z.string(),
+    }),
+  ),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
  * plus the designed-for P2/P3/P4/P5 shapes. `safeParse` every incoming line against this.
  */
@@ -318,6 +385,8 @@ export const FrameSchema = z.discriminatedUnion('type', [
   OverrideSchema, // P5 additive (Face→daemon /override activation)
   BreakerCancelSchema, // P5 additive (Face→daemon Red cancel within the 10s window)
   HistoryRequestSchema, // additive (Face→daemon request persisted chat history)
+  SettingsUpdateSchema, // additive (Face→daemon update owner safety posture)
+  AuditQuerySchema, // additive (Face→daemon request recent audit entries)
   // daemon → Face
   ReadySchema,
   ReplySchema,
@@ -334,6 +403,9 @@ export const FrameSchema = z.discriminatedUnion('type', [
   WidgetCommandSchema, // additive (daemon→Face widget-displayer command-language string)
   ToolActivitySchema, // additive (daemon→Face background tool-use activity for live visibility)
   HistoryDataSchema, // additive (daemon→Face persisted chat history on request)
+  OverrideStateSchema, // additive (daemon→Face live /override state for the status pill + countdown)
+  SettingsStateSchema, // additive (daemon→Face current owner safety posture for the Settings page)
+  AuditDataSchema, // additive (daemon→Face recent audit entries for the Activity view)
 ]);
 
 /** Any valid frame. */
@@ -363,6 +435,11 @@ export type WidgetCommand = z.infer<typeof WidgetCommandSchema>;
 export type ToolActivity = z.infer<typeof ToolActivitySchema>;
 export type HistoryRequest = z.infer<typeof HistoryRequestSchema>;
 export type HistoryData = z.infer<typeof HistoryDataSchema>;
+export type OverrideState = z.infer<typeof OverrideStateSchema>;
+export type SettingsUpdate = z.infer<typeof SettingsUpdateSchema>;
+export type SettingsState = z.infer<typeof SettingsStateSchema>;
+export type AuditQuery = z.infer<typeof AuditQuerySchema>;
+export type AuditData = z.infer<typeof AuditDataSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

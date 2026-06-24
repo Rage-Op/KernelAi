@@ -53,6 +53,11 @@ export interface OverrideState {
   allows(tier: 'green' | 'yellow' | 'red'): OverrideBehavior;
   /** True while a non-expired activation is in effect (auto-expiry on the injected clock). */
   isActive(): boolean;
+  /**
+   * A point-in-time view for the Face's status pill + countdown: whether an activation is in effect
+   * and, when so, its scope + expiry (ms on the injected clock — a real epoch for the singleton).
+   */
+  snapshot(): { active: boolean; scope?: string; expiresAt?: number };
   /** True iff `cap` is on the denylist — i.e. override can NEVER unlock it. */
   isDenylisted(cap: string): boolean;
 }
@@ -108,6 +113,12 @@ export function createOverride(deps: OverrideDeps): OverrideState {
 
     isActive(): boolean {
       return active();
+    },
+
+    snapshot(): { active: boolean; scope?: string; expiresAt?: number } {
+      return active()
+        ? { active: true, scope: activeScope, expiresAt }
+        : { active: false };
     },
 
     isDenylisted(cap: string): boolean {

@@ -26,6 +26,7 @@ import type { Tool, ToolResult } from './Tool.js';
 import { run as runBreaker, canonical, type BreakerDeps, type DryRunPreview } from '../safety/breaker.js';
 import { createSpendLedger, defaultLedgerPath } from '../safety/spend-ledger.js';
 import { appendAudit, defaultAuditPath, type AuditEntry } from '../safety/audit.js';
+import { dailySpendCeiling } from '../safety/owner-config.js';
 
 /** name → Tool. Module-level by design (one daemon, one registry). */
 const registry = new Map<string, Tool>();
@@ -86,8 +87,9 @@ async function defaultBreakerDeps(tool: Tool): Promise<BreakerDeps> {
   const ledger = createSpendLedger({
     now: () => Date.now(),
     filePath: defaultLedgerPath(config.memoryDir),
-    // The owner-set daily ceiling. Conservative default; surfaced for owner config in a later plan.
-    ceiling: Number(process.env.KERNEL_DAILY_SPEND_CEILING ?? 0),
+    // The owner-set daily ceiling, now a PERSISTED owner setting (safety/owner-config.ts) the Face
+    // can change over IPC — falls back to the env/default when the owner hasn't set one.
+    ceiling: dailySpendCeiling(),
   });
   resetBreakerCancel();
   return {

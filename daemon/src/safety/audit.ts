@@ -51,3 +51,38 @@ export function appendAudit(entry: AuditEntry, filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.appendFileSync(filePath, JSON.stringify(entry) + '\n', 'utf8');
 }
+
+/** The SAFE projection of an audit entry surfaced to the Face's Activity view: what/outcome/when. */
+export interface AuditView {
+  tool: string;
+  outcome: string;
+  ts: string;
+}
+
+/**
+ * Read the most recent audit entries for the Activity view, oldest→newest. Returns ONLY the safe
+ * projection (tool name, outcome, timestamp) — never the content hash, args, or any finance amount
+ * (V7). Malformed lines are skipped; an absent log returns []. Read-only — never mutates the log.
+ * `filePath` is injectable for tests (mirrors appendAudit / defaultAuditPath).
+ */
+export function readAudit(filePath: string, limit = 200): AuditView[] {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return []; // absent log → empty
+  }
+  const out: AuditView[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const o = JSON.parse(line) as Partial<AuditEntry>;
+      if (o && typeof o.outcome === 'string' && typeof o.ts === 'string' && o.call && typeof o.call.tool === 'string') {
+        out.push({ tool: o.call.tool, outcome: o.outcome, ts: o.ts });
+      }
+    } catch {
+      /* skip a corrupt line */
+    }
+  }
+  return out.slice(-limit);
+}
