@@ -26,6 +26,7 @@ import { signalBreakerCancel, setBreakerBroadcast, listTools } from '../tools/re
 import { overrideSingleton } from '../safety/override.js';
 import { CLOUD_PRICE_PER_TOKEN } from '../brain/pricing.js';
 import { recordTurn } from '../commands/session-usage.js';
+import { conversation } from '../memory/conversation.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
@@ -84,6 +85,28 @@ function statsFromUsage(id: string, usage: BrainUsage): Stats {
     contextWindow: usage.contextWindow,
     estCostUsd,
   };
+}
+
+/**
+ * Probe whether a LIVE daemon is already listening on `socketPath`. A successful connect means
+ * another daemon owns the socket, so the boot path (index.ts) should exit rather than start a
+ * second one: `startIpc` unlinks the socket before binding, which would otherwise STEAL it from the
+ * running daemon (the two-daemon bug). A connection ERROR — ENOENT (no socket file) or ECONNREFUSED
+ * (a stale socket file with no listener) — means no live daemon, so binding is safe. Resolves false
+ * on a short timeout so a wedged peer can never hang startup.
+ */
+export function probeDaemonAlive(socketPath: string = config.socketPath): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.connect(socketPath);
+    const finish = (alive: boolean) => {
+      sock.removeAllListeners();
+      sock.destroy();
+      resolve(alive);
+    };
+    sock.once('connect', () => finish(true));
+    sock.once('error', () => finish(false));
+    sock.setTimeout(800, () => finish(false));
+  });
 }
 
 /** A handler invoked for every successfully-parsed, schema-valid inbound frame. */
@@ -322,6 +345,18 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
       // executing). `id` correlates to the active preview; the registry ignores a stale id.
       signalBreakerCancel(frame.id);
       break;
+    case 'history.request': {
+      // ADDITIVE arm: the Face's Chat page asks for the persisted transcript on connect. Read the
+      // durable conversation log and reply with the recent turns (owner/assistant only, with
+      // timestamps), correlated by `id`. Read-only — never mutates the conversation.
+      const turns = conversation.readRecent(frame.limit ?? 200).map((t) => ({
+        role: t.role,
+        text: t.text,
+        ts: t.ts,
+      }));
+      send(conn, { type: 'history.data', id: frame.id, turns });
+      break;
+    }
     default:
       // hello / ui.intent / ui.state / daemon-origin frames: no action here.
       break;

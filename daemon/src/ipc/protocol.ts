@@ -274,6 +274,37 @@ export const ToolActivitySchema = z.object({
 });
 
 /**
+ * ADDITIVE arm (Face→daemon): request the persisted chat history so the Chat page can render past
+ * conversations on connect (the daemon owns the durable transcript at
+ * ~/Library/Application Support/Kernel/conversation.jsonl). `limit` caps how many recent turns to
+ * return (default applied daemon-side). Correlated to the `history.data` reply by `id`. Appended to
+ * the frozen union — existing arms are NEVER mutated.
+ */
+export const HistoryRequestSchema = z.object({
+  type: z.literal('history.request'),
+  id: z.string(),
+  limit: z.number().optional(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): the persisted chat history, in chronological order, answering a
+ * `history.request` (same `id`). Each turn carries its role, text, and a millisecond timestamp so
+ * the Chat page can show day/time separators. Owner/assistant turns only (external/tool content is
+ * never recorded as dialogue — provenance). Appended to the frozen union.
+ */
+export const HistoryDataSchema = z.object({
+  type: z.literal('history.data'),
+  id: z.string(),
+  turns: z.array(
+    z.object({
+      role: z.enum(['user', 'assistant']),
+      text: z.string(),
+      ts: z.number(),
+    }),
+  ),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
  * plus the designed-for P2/P3/P4/P5 shapes. `safeParse` every incoming line against this.
  */
@@ -286,6 +317,7 @@ export const FrameSchema = z.discriminatedUnion('type', [
   SettingsSchema, // P3 additive (Face→daemon brain toggle)
   OverrideSchema, // P5 additive (Face→daemon /override activation)
   BreakerCancelSchema, // P5 additive (Face→daemon Red cancel within the 10s window)
+  HistoryRequestSchema, // additive (Face→daemon request persisted chat history)
   // daemon → Face
   ReadySchema,
   ReplySchema,
@@ -301,6 +333,7 @@ export const FrameSchema = z.discriminatedUnion('type', [
   SaySchema, // additive (daemon→Face streamed reply deltas for real-time render + TTS)
   WidgetCommandSchema, // additive (daemon→Face widget-displayer command-language string)
   ToolActivitySchema, // additive (daemon→Face background tool-use activity for live visibility)
+  HistoryDataSchema, // additive (daemon→Face persisted chat history on request)
 ]);
 
 /** Any valid frame. */
@@ -328,6 +361,8 @@ export type Stats = z.infer<typeof StatsSchema>;
 export type Say = z.infer<typeof SaySchema>;
 export type WidgetCommand = z.infer<typeof WidgetCommandSchema>;
 export type ToolActivity = z.infer<typeof ToolActivitySchema>;
+export type HistoryRequest = z.infer<typeof HistoryRequestSchema>;
+export type HistoryData = z.infer<typeof HistoryDataSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

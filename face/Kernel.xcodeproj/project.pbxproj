@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		047A284DA06FA13DC44D1D3D /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888773F60C9D69DBE740F411 /* FilesView.swift */; };
 		079CC7C6F258BB709F7A37AF /* FrameCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3119C2D1D0B5D827222012 /* FrameCodecTests.swift */; };
 		0ED98BF241F2969FC4555008 /* StageControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16148C3EFEBBE30F2FCE9282 /* StageControllerTests.swift */; };
 		1B2B805F0D4B1EDCB41250F5 /* TelemetryFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 993604D376831AA47881E9F8 /* TelemetryFormat.swift */; };
@@ -16,6 +17,8 @@
 		32B70ACC3CF4BD01A00770BD /* BreakerPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F0579A84C7D1D3E3F91FCF /* BreakerPreviewCard.swift */; };
 		33AC917533E193EC87351912 /* BootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23763944C65D1590306AA94 /* BootstrapTests.swift */; };
 		37B171380A920CE186512864 /* WidgetPresentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD18855C1E06F8E5B08476C /* WidgetPresentTests.swift */; };
+		3A8C5B200BCF35578990A1FA /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B63E02251683693E37BF4A9 /* ChatView.swift */; };
+		3C6319EF9FA602D5E044B93F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F117564885273FC5851D40D /* SettingsView.swift */; };
 		3D603DC06ACAC7B04655DF3A /* Cue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E2D51A82AB1B4CACE1AE21 /* Cue.swift */; };
 		4AC160EE8D1629F298C6B0C3 /* TitleBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1581C869303EA5029A4C8AB3 /* TitleBar.swift */; };
 		50530AB63A85F1D2D6129922 /* RuntimeWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E3CA693C73CEBBC7A4DFDB /* RuntimeWindow.swift */; };
@@ -50,9 +53,11 @@
 		D93054EB469FA366019234CB /* ConversationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128AAB739F1B58E2F0A2B390 /* ConversationOverlay.swift */; };
 		E737C6D6DA7FEFC76BBA032A /* CapabilitiesStatsFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53B5F431D5977EA7F417C28 /* CapabilitiesStatsFrameTests.swift */; };
 		E89A73582776E9C984435FC2 /* EmailPreviewWidgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63092470ECF7A7269EEB57E4 /* EmailPreviewWidgetTests.swift */; };
+		EC23C4B00426B01F664ED22B /* DaemonSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58103C2863765A027A652775 /* DaemonSupervisor.swift */; };
 		EDED0FB00259BB524220DFF1 /* TelemetryStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63DDF73DFABB2D9E91D04E1A /* TelemetryStrip.swift */; };
 		F027D3F9A182E74DF34C573C /* WidgetRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7F120C9369A4789389E371 /* WidgetRenderTests.swift */; };
 		F038967A9CA01EA613799063 /* Frames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48D7F81C2056D4C22D02909D /* Frames.swift */; };
+		F1A7D8C960711D28DA04FBAB /* AppShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F0ECCA5448195EC385EEDD /* AppShell.swift */; };
 		F2CD0BAA4669707EBF30247A /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = F598C22C9E59BF99CBB93134 /* Motion.swift */; };
 		FC5FA779A37096D8CC3C88E7 /* MicEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F4EDAF801AA259DC93042F /* MicEngine.swift */; };
 /* End PBXBuildFile section */
@@ -81,7 +86,9 @@
 		1ED9D858069467D129FE708C /* AccountsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsWidget.swift; sourceTree = "<group>"; };
 		227343D40D493FAC0CCF6BCE /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		23F0579A84C7D1D3E3F91FCF /* BreakerPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakerPreviewCard.swift; sourceTree = "<group>"; };
+		2B63E02251683693E37BF4A9 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		2EC7FAC2854624CD256ACF0D /* ControlDock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlDock.swift; sourceTree = "<group>"; };
+		2F117564885273FC5851D40D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		327C7CEFE4DEFF1605EBCD86 /* EventsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsWidget.swift; sourceTree = "<group>"; };
 		36E3CA693C73CEBBC7A4DFDB /* RuntimeWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeWindow.swift; sourceTree = "<group>"; };
 		387445C0B4E402C94DC5BECF /* TranscriptPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptPill.swift; sourceTree = "<group>"; };
@@ -91,6 +98,8 @@
 		45B85B01F2711F6AA9E286CC /* WidgetCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetCommandTests.swift; sourceTree = "<group>"; };
 		48D7F81C2056D4C22D02909D /* Frames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Frames.swift; sourceTree = "<group>"; };
 		55DA7395386F5C580A2A5678 /* MailWidgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailWidgetTests.swift; sourceTree = "<group>"; };
+		58103C2863765A027A652775 /* DaemonSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaemonSupervisor.swift; sourceTree = "<group>"; };
+		59F0ECCA5448195EC385EEDD /* AppShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShell.swift; sourceTree = "<group>"; };
 		5C1ADCD649DA3432EADAEC68 /* StageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageController.swift; sourceTree = "<group>"; };
 		5CD18855C1E06F8E5B08476C /* WidgetPresentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetPresentTests.swift; sourceTree = "<group>"; };
 		6031C7693DB73B68A9F6ADED /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -100,6 +109,7 @@
 		7B5D7D7D8E4B96BA7A8ED69B /* Kernel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Kernel.entitlements; sourceTree = "<group>"; };
 		809B0BB8C9CB88CD91823318 /* RuntimeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeState.swift; sourceTree = "<group>"; };
 		8563D0130C0964B40CE246F8 /* TelemetryFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryFormatTests.swift; sourceTree = "<group>"; };
+		888773F60C9D69DBE740F411 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
 		94EF16300BDE7B0F12AAC04E /* MessageBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBar.swift; sourceTree = "<group>"; };
 		962A24B4F107DB1A15EBA0EE /* CloudWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudWindow.swift; sourceTree = "<group>"; };
 		993604D376831AA47881E9F8 /* TelemetryFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryFormat.swift; sourceTree = "<group>"; };
@@ -176,6 +186,7 @@
 		52BB9F891D95D85002D5E24E /* IPC */ = {
 			isa = PBXGroup;
 			children = (
+				58103C2863765A027A652775 /* DaemonSupervisor.swift */,
 				48D7F81C2056D4C22D02909D /* Frames.swift */,
 				17EF899658131B94C9F042DA /* KernelSocket.swift */,
 			);
@@ -223,13 +234,17 @@
 		94B3952D0E98361A33BBB406 /* Shell */ = {
 			isa = PBXGroup;
 			children = (
+				59F0ECCA5448195EC385EEDD /* AppShell.swift */,
 				02A8BDF354B85815DCA541B3 /* BootScreen.swift */,
 				A098A91844071C72FAC1E8FB /* CardGallery.swift */,
+				2B63E02251683693E37BF4A9 /* ChatView.swift */,
 				2EC7FAC2854624CD256ACF0D /* ControlDock.swift */,
 				128AAB739F1B58E2F0A2B390 /* ConversationOverlay.swift */,
+				888773F60C9D69DBE740F411 /* FilesView.swift */,
 				94EF16300BDE7B0F12AAC04E /* MessageBar.swift */,
 				809B0BB8C9CB88CD91823318 /* RuntimeState.swift */,
 				36E3CA693C73CEBBC7A4DFDB /* RuntimeWindow.swift */,
+				2F117564885273FC5851D40D /* SettingsView.swift */,
 				993604D376831AA47881E9F8 /* TelemetryFormat.swift */,
 				63DDF73DFABB2D9E91D04E1A /* TelemetryStrip.swift */,
 				1581C869303EA5029A4C8AB3 /* TitleBar.swift */,
@@ -293,6 +308,7 @@
 			buildConfigurationList = 4757177F2383BFD3F8BEC1D0 /* Build configuration list for PBXNativeTarget "Kernel" */;
 			buildPhases = (
 				27624E64890AD6E565D0441B /* Sources */,
+				58EC153827BE62634FE4107A /* Build & (optionally) embed KERNEL daemon */,
 			);
 			buildRules = (
 			);
@@ -362,6 +378,28 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		58EC153827BE62634FE4107A /* Build & (optionally) embed KERNEL daemon */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build & (optionally) embed KERNEL daemon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nDAEMON_SRC=\"${SRCROOT}/../daemon\"\nif command -v npm >/dev/null 2>&1; then\n  ( cd \"$DAEMON_SRC\" && npm run build ) || echo \"warning: daemon build failed; using existing dist/\"\nelse\n  echo \"warning: npm not on PATH; skipping daemon build (runtime uses existing dist/)\"\nfi\nif [ \"${KERNEL_EMBED_NODE_MODULES:-0}\" = \"1\" ]; then\n  DEST=\"${BUILT_PRODUCTS_DIR}/${UNLOCKED_RESOURCES_FOLDER_PATH}/daemon\"\n  mkdir -p \"$DEST\"\n  rsync -a --delete \"$DAEMON_SRC/dist/\" \"$DEST/dist/\" || true\n  rsync -a \"$DAEMON_SRC/node_modules/\" \"$DEST/node_modules/\" || true\n  cp \"$DAEMON_SRC/package.json\" \"$DEST/package.json\" || true\n  cp \"${SRCROOT}/../launchd/kernel-launch.sh\" \"$DEST/kernel-launch.sh\" 2>/dev/null || true\n  echo \"embedded full daemon → $DEST\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		27624E64890AD6E565D0441B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -369,18 +407,22 @@
 			files = (
 				BB30FA8A01AB4AE35217DB29 /* AccountsWidget.swift in Sources */,
 				9D5510B23514F8FB38E72A25 /* AppCoordinator.swift in Sources */,
+				F1A7D8C960711D28DA04FBAB /* AppShell.swift in Sources */,
 				83FB9426A2E948EBE963A7B1 /* BootScreen.swift in Sources */,
 				C7B804AEED73EF401A504B2E /* BoundarySpike.swift in Sources */,
 				32B70ACC3CF4BD01A00770BD /* BreakerPreviewCard.swift in Sources */,
 				7BFCE5FB0B242A6A22E688B6 /* CardGallery.swift in Sources */,
 				2D90B395AAA531523B7E69F7 /* CardStyle.swift in Sources */,
+				3A8C5B200BCF35578990A1FA /* ChatView.swift in Sources */,
 				8594589FAE12D887683700AC /* CloudWindow.swift in Sources */,
 				AC91955281DD6E143F8441CC /* ControlDock.swift in Sources */,
 				D93054EB469FA366019234CB /* ConversationOverlay.swift in Sources */,
 				3D603DC06ACAC7B04655DF3A /* Cue.swift in Sources */,
+				EC23C4B00426B01F664ED22B /* DaemonSupervisor.swift in Sources */,
 				C359BB5F854B07B0F6B41CB2 /* EmailPreviewWidget.swift in Sources */,
 				94F0830692D8DADA050094EF /* EventKitBridge.swift in Sources */,
 				87731C5F5B698E1426F2B662 /* EventsWidget.swift in Sources */,
+				047A284DA06FA13DC44D1D3D /* FilesView.swift in Sources */,
 				F038967A9CA01EA613799063 /* Frames.swift in Sources */,
 				BA2AC7AEF3EE4A747A3034D5 /* KernelApp.swift in Sources */,
 				A394F9FD3365C26F7AF108E8 /* KernelSocket.swift in Sources */,
@@ -392,6 +434,7 @@
 				B19460B5AFEA72D2B4D3C45F /* Particles.swift in Sources */,
 				88A12EA92A2489ACC2BCBFEC /* RuntimeState.swift in Sources */,
 				50530AB63A85F1D2D6129922 /* RuntimeWindow.swift in Sources */,
+				3C6319EF9FA602D5E044B93F /* SettingsView.swift in Sources */,
 				623812EED131A157C7B8C34B /* Speaker.swift in Sources */,
 				D88A92F3A0BE94C02FFD93BD /* SpendingWidget.swift in Sources */,
 				C75E111C26F08812690A866D /* StageController.swift in Sources */,

@@ -79,6 +79,14 @@ struct FrameOnFinish: Codable, Equatable {
     let widget: String?
 }
 
+/// One persisted chat turn inside a `history.data` frame (mirrors HistoryDataSchema.turns[]).
+/// `role` is "user" or "assistant"; `ts` is a millisecond timestamp.
+struct HistoryTurn: Codable, Equatable {
+    let role: String
+    let text: String
+    let ts: Double
+}
+
 // MARK: - Frame (the discriminated union on `type`)
 
 /// The frozen frame contract, mirrored as a Swift enum keyed on `type`. A
@@ -135,6 +143,12 @@ enum Frame: Codable, Equatable {
     /// ADDITIVE (daemon→Face): background tool-use activity so the Face can show what KERNEL is
     /// doing live ("🔧 web · searching…", then a brief ✓). Mirrors ToolActivitySchema. Informational.
     case toolActivity(id: String, tool: String, op: String, status: String, detail: String?)
+    /// ADDITIVE (Face→daemon): request the persisted chat history for the Chat page. Mirrors
+    /// HistoryRequestSchema. `limit` caps how many recent turns to return.
+    case historyRequest(id: String, limit: Int?)
+    /// ADDITIVE (daemon→Face): the persisted chat history answering a `history.request` (same `id`).
+    /// Mirrors HistoryDataSchema. Owner/assistant turns only, chronological, with timestamps.
+    case historyData(id: String, turns: [HistoryTurn])
 
     /// The Settings brain toggle enum (mirrors SettingsSchema.brain).
     enum Brain: String, Codable { case cloud, local }
@@ -159,6 +173,7 @@ enum Frame: Codable, Equatable {
         case delta
         case command
         case tool, op, status, detail
+        case limit, turns
     }
 
     // MARK: Decode (narrow by `type`, exactly like the zod discriminated union)
@@ -228,6 +243,14 @@ enum Frame: Codable, Equatable {
                 op: try c.decode(String.self, forKey: .op),
                 status: try c.decode(String.self, forKey: .status),
                 detail: try c.decodeIfPresent(String.self, forKey: .detail))
+        case "history.request":
+            self = .historyRequest(
+                id: try c.decode(String.self, forKey: .id),
+                limit: try c.decodeIfPresent(Int.self, forKey: .limit))
+        case "history.data":
+            self = .historyData(
+                id: try c.decode(String.self, forKey: .id),
+                turns: try c.decode([HistoryTurn].self, forKey: .turns))
         case "breaker.preview":
             self = .breakerPreview(
                 id: try c.decode(String.self, forKey: .id),
@@ -342,6 +365,14 @@ enum Frame: Codable, Equatable {
             try c.encode(op, forKey: .op)
             try c.encode(status, forKey: .status)
             try c.encodeIfPresent(detail, forKey: .detail)
+        case .historyRequest(let id, let limit):
+            try c.encode("history.request", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encodeIfPresent(limit, forKey: .limit)
+        case .historyData(let id, let turns):
+            try c.encode("history.data", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(turns, forKey: .turns)
         case .breakerPreview(let id, let summary, let estimatedSpend, let tier):
             try c.encode("breaker.preview", forKey: .type)
             try c.encode(id, forKey: .id)

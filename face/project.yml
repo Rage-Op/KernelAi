@@ -46,6 +46,31 @@ targets:
         # Non-sandboxed Developer-ID app (RESEARCH Open Question 4): avoids
         # UDS/mic sandbox exceptions; not destined for the Mac App Store.
         ENABLE_APP_SANDBOX: false
+    postBuildScripts:
+      # Keep the daemon's compiled dist/ fresh on every app build so a Cmd+R run launches CURRENT
+      # daemon code (the DaemonSupervisor spawns the repo daemon when none is running). Best-effort:
+      # if node/npm aren't on PATH the build still succeeds and the app falls back to whatever dist/
+      # already exists. Set KERNEL_EMBED_NODE_MODULES=1 to ALSO copy the full daemon (dist +
+      # node_modules + manifest + launcher) into the .app for a self-contained, distributable bundle.
+      - name: "Build & (optionally) embed KERNEL daemon"
+        basedOnDependencyAnalysis: false
+        script: |
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          DAEMON_SRC="${SRCROOT}/../daemon"
+          if command -v npm >/dev/null 2>&1; then
+            ( cd "$DAEMON_SRC" && npm run build ) || echo "warning: daemon build failed; using existing dist/"
+          else
+            echo "warning: npm not on PATH; skipping daemon build (runtime uses existing dist/)"
+          fi
+          if [ "${KERNEL_EMBED_NODE_MODULES:-0}" = "1" ]; then
+            DEST="${BUILT_PRODUCTS_DIR}/${UNLOCKED_RESOURCES_FOLDER_PATH}/daemon"
+            mkdir -p "$DEST"
+            rsync -a --delete "$DAEMON_SRC/dist/" "$DEST/dist/" || true
+            rsync -a "$DAEMON_SRC/node_modules/" "$DEST/node_modules/" || true
+            cp "$DAEMON_SRC/package.json" "$DEST/package.json" || true
+            cp "${SRCROOT}/../launchd/kernel-launch.sh" "$DEST/kernel-launch.sh" 2>/dev/null || true
+            echo "embedded full daemon → $DEST"
+          fi
 
   KernelTests:
     type: bundle.unit-test

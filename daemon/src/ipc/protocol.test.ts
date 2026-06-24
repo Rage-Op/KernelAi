@@ -47,6 +47,35 @@ test('protocol: tool.activity frame round-trips (additive, daemon→Face backgro
   );
 });
 
+test('protocol: history.request / history.data round-trip (additive, persisted chat history)', () => {
+  // Face→daemon request (limit optional).
+  assert.equal(FrameSchema.safeParse({ type: 'history.request', id: 'h1', limit: 50 }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'history.request', id: 'h1' }).success, true, 'limit optional');
+  // daemon→Face reply with typed turns.
+  assert.equal(
+    FrameSchema.safeParse({
+      type: 'history.data',
+      id: 'h1',
+      turns: [
+        { role: 'user', text: 'hi', ts: 1 },
+        { role: 'assistant', text: 'hello', ts: 2 },
+      ],
+    }).success,
+    true,
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'history.data', id: 'h1', turns: [] }).success,
+    true,
+    'an empty transcript is valid',
+  );
+  // role is constrained — no 'clear'/external content leaks into the wire history.
+  assert.equal(
+    FrameSchema.safeParse({ type: 'history.data', id: 'h1', turns: [{ role: 'clear', text: '', ts: 0 }] }).success,
+    false,
+    'role is constrained to user|assistant',
+  );
+});
+
 test('protocol: a missing required field is rejected', () => {
   // utterance without `text`
   assert.equal(FrameSchema.safeParse({ type: 'utterance', id: 'a1', final: true }).success, false);

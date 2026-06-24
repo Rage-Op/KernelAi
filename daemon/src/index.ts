@@ -16,8 +16,9 @@
 import { config } from './config.js';
 import { logger } from './memory/log.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
-import { startIpcServer } from './ipc/server.js';
-import { restorePersistedBrain } from './settings.js';
+import { startIpcServer, probeDaemonAlive } from './ipc/server.js';
+import { applySettings, loadPersistedBrain } from './settings.js';
+import { conversation } from './memory/conversation.js';
 import { registerBuiltinTools } from './tools/register-builtins.js';
 import { runHeartbeat } from './heartbeat.js';
 import { runConsolidation } from './memory/consolidate.js';
@@ -79,12 +80,31 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   }
 
   runStartupGuards();
+
+  // SINGLE-INSTANCE GUARD: if a daemon is already listening on the socket (e.g. the launchd job),
+  // do NOT start a second one. `startIpc` unlinks the stale socket before binding, which would
+  // otherwise STEAL the socket from the running daemon and leave two daemons fighting over it — the
+  // root cause of "the Face talks to the wrong (env-less) daemon" (no Tavily key → no internet).
+  if (await probeDaemonAlive(config.socketPath)) {
+    logger.warn(
+      { socketPath: config.socketPath },
+      'another KERNEL daemon is already listening — exiting (single-instance guard)',
+    );
+    process.exit(0);
+  }
+
   // Register the built-in tools (HANDS-04) so the brain can dispatch them and the capabilities
   // frame reports them. Resilient: a tool whose module fails to load is skipped, not fatal.
   await registerBuiltinTools();
-  // Re-apply the owner's last brain choice (CLOUD-01) so a launchd relaunch keeps cloud/local.
-  // No-op when never toggled — the loop keeps its default brain.
-  restorePersistedBrain();
+  // Choose the active brain. A persisted owner choice wins; otherwise default to the LOCAL brain
+  // (qwen3.5 via Ollama) so a never-toggled owner gets a real, offline-capable, tool-using brain
+  // out of the box — NOT the StubBrain placeholder or a keyless cloud brain (the "it's dumb /
+  // won't use tools" report). persist=false: the value already came from disk (or is the default).
+  applySettings(loadPersistedBrain() ?? 'local', false);
+  // Restore the recent dialogue from the durable transcript so the model CONTINUES the conversation
+  // across daemon restarts (the persisted-chat-history fix). Only turns after the last /clear are
+  // restored. Best-effort; an absent/empty log just starts fresh.
+  conversation.load();
   const ipc = await startIpcServer();
   logger.info({ socketPath: config.socketPath }, 'KERNEL daemon online — IPC listening');
 

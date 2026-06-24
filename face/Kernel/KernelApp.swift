@@ -25,13 +25,14 @@ struct KernelApp: App {
         // The designed runtime window: the living sphere stage + titlebar + persistent chrome
         // (CLOUD-02). Full-screen ↔ corner-pill states animate inside the embedded stage.
         Window("Kernel", id: "cloud") {
-            RuntimeWindow(coordinator: coordinator)
-                .frame(minWidth: 720, minHeight: 540)
+            AppShell(coordinator: coordinator)
+                .frame(minWidth: 820, minHeight: 560)
                 .background(Tokens.canvas)
+                .preferredColorScheme(.dark)   // the design is warm-DARK — never let system light leak in
                 .onAppear { coordinator.start() }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 920, height: 680)
+        .defaultSize(width: 1040, height: 720)
 
         MenuBarExtra("Kernel", systemImage: "circle.dotted") {
             MenuBarContent(coordinator: coordinator, spike: spike)
@@ -129,6 +130,7 @@ struct MenuBarContent: View {
         }
         .padding(Tokens.Space.lg)
         .frame(width: 280)
+        .preferredColorScheme(.dark)   // keep the menubar panel on the warm-dark theme too
     }
 
     private var connectionLabel: String {

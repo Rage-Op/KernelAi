@@ -23,6 +23,15 @@ final class AppCoordinator: ObservableObject {
     let mic: MicEngine
     /// NWConnection UDS NDJSON client to the daemon.
     let socket = KernelSocket()
+    /// Owns the daemon lifecycle for the hybrid model: spawns one when none answers (so Cmd+R / a
+    /// plain app launch starts the daemon), terminating only a daemon IT spawned.
+    let supervisor = DaemonSupervisor()
+
+    /// The pages reachable from the app shell's left navigation rail.
+    enum Page: String, CaseIterable { case home, chat, files, settings }
+
+    /// The active page in the navigation rail. `.home` is the living sphere stage.
+    @Published var page: Page = .home
 
     /// The single animated scene state (CLOUD-05). Driven by inbound `ui.state`.
     @Published var scene: Frame.SceneState = .fullscreen
@@ -55,6 +64,11 @@ final class AppCoordinator: ObservableObject {
     /// The on-screen YOU ↔ KERNEL conversation (the design's stage transcript), oldest→newest.
     @Published private(set) var conversationLines: [ConversationLine] = []
     private var convSeq = 0
+
+    /// The persisted chat history loaded from the daemon on connect (`history.data`). Shown in the
+    /// Chat page ABOVE this session's live `conversationLines`. Ids are NEGATIVE so they never
+    /// collide with the positive `convSeq` of live turns.
+    @Published private(set) var chatHistory: [ConversationLine] = []
 
     // MARK: Streaming reply (the `say` frame path — real-time render + TTS)
 
@@ -189,15 +203,17 @@ final class AppCoordinator: ObservableObject {
 
     /// The active brain shown in the menubar Settings toggle (CLOUD-01). Seeded from UserDefaults
     /// so the visible choice survives Face restarts; the daemon persists its own copy (settings.ts)
-    /// so the active brain survives daemon restarts. Default `.cloud` (ClaudeBrain — BRAIN-02).
+    /// so the active brain survives daemon restarts. Default `.local` (LocalBrain / qwen3.5 via
+    /// Ollama) — a local-first assistant that uses tools and works offline without a cloud key. This
+    /// mirrors the daemon's boot default (index.ts) so the UI and daemon agree out of the box.
     @Published var brain: Frame.Brain = AppCoordinator.loadBrainPreference()
 
     /// UserDefaults key for the persisted brain selection (UI-side mirror of the daemon's brain.json).
     private static let brainDefaultsKey = "kernel.brain"
 
-    /// Read the persisted UI brain choice, defaulting to `.cloud` when unset/invalid.
+    /// Read the persisted UI brain choice, defaulting to `.local` when unset/invalid.
     static func loadBrainPreference() -> Frame.Brain {
-        Frame.Brain(rawValue: UserDefaults.standard.string(forKey: brainDefaultsKey) ?? "") ?? .cloud
+        Frame.Brain(rawValue: UserDefaults.standard.string(forKey: brainDefaultsKey) ?? "") ?? .local
     }
 
     init() {
@@ -237,6 +253,20 @@ final class AppCoordinator: ObservableObject {
         socket.onFrame = { [weak self] frame in self?.handle(frame) }
         socket.$status.assign(to: &$connection)
         socket.connect()
+        // HYBRID daemon lifecycle: if nothing answers shortly, spawn the daemon ourselves and
+        // reconnect. A launchd-owned daemon answers first (no spawn); a plain Cmd+R with launchd not
+        // loaded triggers a spawn. The daemon's single-instance guard makes any accidental double safe.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.connection != .connected else { return }
+            if self.supervisor.spawnIfNeeded() {
+                // Give the freshly-spawned daemon a moment to bind the socket, then (re)connect.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
+                    guard let self, self.connection != .connected else { return }
+                    self.socket.disconnect()
+                    self.socket.connect()
+                }
+            }
+        }
         // PUSH-TO-TALK: the mic is NOT started here — KERNEL doesn't listen until the owner holds
         // the mic control (beginListening). Request Speech authorization once so the first hold works.
         MicEngine.requestSpeechAuthorization()
@@ -265,6 +295,7 @@ final class AppCoordinator: ObservableObject {
         switch frame {
         case .ready(let daemon, let version):
             log.info("daemon ready: \(daemon, privacy: .public) v\(version, privacy: .public)")
+            requestHistory()   // pull the persisted transcript so the Chat page shows past conversations
         case .speak(let id, let text, let frameCues, let onFinish):
             _ = id
             isAwaitingReply = false   // the reply has arrived; isSpeaking will take over the mode
@@ -308,6 +339,13 @@ final class AppCoordinator: ObservableObject {
             presentWidgetCommand(id: id, command: command)
         case .toolActivity(_, let tool, let op, let status, let detail):
             handleToolActivity(tool: tool, op: op, status: status, detail: detail)
+        case .historyData(_, let turns):
+            // The persisted transcript. Map to conversation lines with NEGATIVE ids (never collide
+            // with live convSeq). Shown as the Chat page's scrollback above this session's turns.
+            chatHistory = turns.enumerated().map { idx, t in
+                ConversationLine(id: -(idx + 1), role: t.role == "user" ? .you : .kernel, text: t.text)
+            }
+            log.info("history: loaded \(turns.count, privacy: .public) persisted turns")
         case .error(_, let message):
             log.error("daemon error: \(message, privacy: .public)")
         default:
@@ -458,14 +496,25 @@ final class AppCoordinator: ObservableObject {
 
     private func wireFrames() { /* socket.onFrame set in start() */ }
 
+    /// Ask the daemon for the persisted chat history. The reply arrives as a `history.data` frame
+    /// and (re)seeds `chatHistory` for the Chat page. Called on each fresh `.ready` so a reconnect
+    /// (e.g. after the supervisor spawns the daemon) re-syncs. Cheap + idempotent; test-safe.
+    func requestHistory() {
+        guard !Self.isUnderXCTest else { return }
+        socket.send(.historyRequest(id: "hist-\(String(UUID().uuidString.prefix(8)))", limit: 200))
+    }
+
     // MARK: Owner input (message bar + control dock)
 
     /// Monotonic id for Face-originated utterances.
     private var utteranceSeq = 0
 
     /// Send a typed utterance to the daemon (the text path that complements voice). Appends it to
-    /// the local transcript as a `kernel`… no — as the OWNER's line, and flips the sphere to thinking.
-    func sendUtterance(_ text: String) {
+    /// the local transcript as the OWNER's line and flips the sphere to thinking. `display` overrides
+    /// the echoed transcript text while the full `text` is sent to the daemon — used by attachments so
+    /// the visible line stays clean ("📎 notes.pdf — summarize this") while KERNEL receives the
+    /// extracted file contents.
+    func sendUtterance(_ text: String, display: String? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // Local widget-displayer shortcut (demo / manual): `/widget focus email to:.. options:..`.
@@ -477,7 +526,7 @@ final class AppCoordinator: ObservableObject {
         utteranceSeq += 1
         let id = "face-\(utteranceSeq)"
         // Echo the owner's words onto the stage conversation immediately (optimistic).
-        appendConversation(.you, trimmed)
+        appendConversation(.you, display ?? trimmed)
         noteUtteranceSent()
         guard !Self.isUnderXCTest else {
             log.info("under XCTest host — not sending utterance")

@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "description": "KERNEL — persistent local macOS AI orchestrator daemon (Walking Skeleton)",
+  "bin": {
+    "kernel": "scripts/chat.mjs",
+    "kernel-mcp": "scripts/kernel-mcp.mjs"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "heartbeat": "node dist/index.js --heartbeat",
     "chat": "node scripts/chat.mjs",
+    "mcp": "node scripts/kernel-mcp.mjs",
     "test": "tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\""
   },
   "dependencies": {

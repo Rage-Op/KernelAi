@@ -69,6 +69,26 @@ final class CapabilitiesStatsFrameTests: XCTestCase {
         XCTAssertEqual(FrameCodec.decode(line: line), frame)
     }
 
+    func testHistoryFramesRoundTrip() throws {
+        // Face→daemon request (limit optional) and daemon→Face data with typed turns.
+        let req = Frame.historyRequest(id: "h1", limit: 200)
+        XCTAssertEqual(FrameCodec.decode(line: try FrameCodec.encodeLine(req)), req)
+        XCTAssertEqual(
+            FrameCodec.decode(line: #"{"type":"history.request","id":"h1"}"#),
+            .historyRequest(id: "h1", limit: nil))
+
+        let data = Frame.historyData(id: "h1", turns: [
+            HistoryTurn(role: "user", text: "hi", ts: 1),
+            HistoryTurn(role: "assistant", text: "hello", ts: 2),
+        ])
+        let line = try FrameCodec.encodeLine(data)
+        XCTAssertEqual(FrameCodec.decode(line: line), data)
+        // An empty transcript decodes to an empty turns array.
+        XCTAssertEqual(
+            FrameCodec.decode(line: #"{"type":"history.data","id":"h1","turns":[]}"#),
+            .historyData(id: "h1", turns: []))
+    }
+
     func testToolActivityFrameRoundTrips() throws {
         // start (with detail) round-trips, and ok (detail omitted) decodes with nil detail.
         let frame = Frame.toolActivity(id: "u1", tool: "web", op: "search", status: "start", detail: "apple news")
