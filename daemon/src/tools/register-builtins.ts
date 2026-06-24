@@ -21,6 +21,10 @@ const BUILTIN_TOOL_MODULES = [
   './peekaboo.js',
   './finance.js',
   './web.js',
+  // HANDS-06 — graduated, tier-gated computer control (read-only GREEN, writes YELLOW, destructive
+  // RED → breaker). Self-register like the others; the gate enforces the tier on every call.
+  './fs.js',
+  './shell.js',
 ] as const;
 
 /** Import every built-in tool module so it self-registers. Idempotent; safe to call once at boot. */

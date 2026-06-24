@@ -42,6 +42,19 @@ function resolveSocketPath(): string {
   );
 }
 
+/**
+ * The WORKSPACE root for the `fs`/`shell` hands (HANDS-06). Writes and deletes are confined here by
+ * default (reads are broader, minus secret paths — see exec-policy.ts), so the graduated computer
+ * control the owner enabled cannot clobber arbitrary files. Override with KERNEL_WORKSPACE_DIR;
+ * default ~/Kernel — a dedicated folder OUTSIDE the source repo (so the assistant never writes into
+ * its own codebase) that the owner can open and inspect. The fs tool creates it on first use.
+ */
+function resolveWorkspaceDir(): string {
+  const fromEnv = process.env.KERNEL_WORKSPACE_DIR?.trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return path.join(os.homedir(), 'Kernel');
+}
+
 const ConfigSchema = z.object({
   memoryDir: z
     .string()
@@ -55,6 +68,8 @@ const ConfigSchema = z.object({
     ),
   socketPath: z.string().min(1),
   injectCap: z.number().int().positive(),
+  /** The fs/shell workspace root (HANDS-06). Not existence-checked here — the fs tool mkdir's it lazily. */
+  workspaceDir: z.string().min(1),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -68,6 +83,7 @@ function loadConfig(): Config {
     memoryDir: resolveMemoryDir(),
     socketPath: resolveSocketPath(),
     injectCap: INJECT_CAP,
+    workspaceDir: resolveWorkspaceDir(),
   };
   return ConfigSchema.parse(candidate);
 }

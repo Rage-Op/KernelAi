@@ -11,8 +11,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LocalBrain, OLLAMA_MODEL, OLLAMA_NUM_CTX, __setToolDispatcherForTest } from './LocalBrain.js';
+import {
+  LocalBrain,
+  OLLAMA_MODEL,
+  OLLAMA_NUM_CTX,
+  OLLAMA_NUM_PREDICT,
+  OLLAMA_NUM_PREDICT_DELIBERATE,
+  assessDepth,
+  __setToolDispatcherForTest,
+} from './LocalBrain.js';
 import type { ToolCall } from './BrainProvider.js';
+
+/** A non-streamed Ollama /api/chat mock response carrying `obj` as the JSON body. */
+function mockChatResponse(obj: unknown) {
+  return {
+    ok: true,
+    status: 200,
+    async json() {
+      return obj;
+    },
+    async text() {
+      return '';
+    },
+  };
+}
 
 const realFetch = globalThis.fetch;
 function restoreFetch(): void {
@@ -240,6 +262,122 @@ test('LocalBrain: a rejected fetch (ECONNREFUSED) returns a typed escalation, no
   assert.ok(decision!.reply, 'an absent Ollama still yields a surfaceable reply');
   assert.match(decision!.reply!, /unavailable|not running|Ollama/i, 'reply names Ollama unavailability');
 
+  restoreFetch();
+});
+
+test('assessDepth: trivial turns are quick; multi-step / complex turns are deliberate', () => {
+  // quick: short, single-shot, factual, conversational
+  assert.equal(assessDepth('hi'), 'quick');
+  assert.equal(assessDepth('what is the capital of France?'), 'quick');
+  assert.equal(assessDepth('what is the latest mac mini price?'), 'quick');
+  assert.equal(assessDepth('now make it about mountains'), 'quick');
+  // deliberate: explicit planning / multi-step / complex signals
+  assert.equal(assessDepth('plan a 3-day trip to Kyoto'), 'deliberate');
+  assert.equal(assessDepth('compare Postgres and MySQL and recommend one'), 'deliberate');
+  assert.equal(assessDepth('research the best local LLM for a 16GB Mac'), 'deliberate');
+  assert.equal(assessDepth('how do I set up a launchd agent?'), 'deliberate');
+  assert.equal(assessDepth('a'.repeat(300)), 'deliberate', 'a very long ask is treated as complex');
+});
+
+test('LocalBrain: a simple prompt stays on the QUICK gear (no thinking, snappy budget)', async () => {
+  let body: { think?: boolean; options?: { num_predict?: number } } | undefined;
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    body = init?.body ? JSON.parse(init.body) : undefined;
+    return mockChatResponse({ message: { role: 'assistant', content: 'hi' }, done: true });
+  }) as unknown as typeof fetch;
+
+  await new LocalBrain().reason('hi', 'ctx');
+  assert.equal(body?.think, false, 'quick path keeps thinking OFF (snappy, no rumination)');
+  assert.equal(body?.options?.num_predict, OLLAMA_NUM_PREDICT, 'quick path uses the snappy output budget');
+
+  restoreFetch();
+});
+
+test('LocalBrain: a multi-step prompt takes the DELIBERATE gear (thinking ON, doubled budget)', async () => {
+  let body: { think?: boolean; options?: { num_predict?: number } } | undefined;
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    body = init?.body ? JSON.parse(init.body) : undefined;
+    return mockChatResponse({ message: { role: 'assistant', content: '1. plan\n2. result' }, done: true });
+  }) as unknown as typeof fetch;
+
+  await new LocalBrain().reason('research and compare three options step by step', 'ctx');
+  assert.equal(body?.think, true, 'deliberate path turns thinking ON');
+  assert.equal(
+    body?.options?.num_predict,
+    OLLAMA_NUM_PREDICT_DELIBERATE,
+    'deliberate path doubles the budget so reasoning + a full answer both fit',
+  );
+
+  restoreFetch();
+});
+
+test('LocalBrain: exhausting tool hops drops the tools and nudges a final answer (no stall)', async () => {
+  let calls = 0;
+  let lastBody: { tools?: unknown[]; messages?: Array<{ role: string; content: string }> } | undefined;
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    calls += 1;
+    lastBody = init?.body ? JSON.parse(init.body) : undefined;
+    const hasTools = Array.isArray(lastBody?.tools) && lastBody!.tools!.length > 0;
+    // While tools are advertised the model keeps asking for one; once they're dropped it must answer.
+    return hasTools
+      ? mockChatResponse({
+          message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'web', arguments: { op: 'search', query: 'x' } } }] },
+          done: true,
+        })
+      : mockChatResponse({ message: { role: 'assistant', content: 'Final answer from observations.' }, done: true });
+  }) as unknown as typeof fetch;
+
+  __setToolDispatcherForTest(async () => ({ ok: true, data: { hit: 1 } }));
+
+  // 'hello' → quick gear (MAX_TOOL_HOPS=4): hops 0..3 each call a tool, hop 4 is forced tool-less.
+  const decision = await new LocalBrain().reason('hello', 'ctx');
+  assert.equal(calls, 5, 'four tool hops then one forced, tool-less answer hop');
+  assert.equal(
+    Array.isArray(lastBody?.tools) && lastBody!.tools!.length > 0,
+    false,
+    'the final hop advertises NO tools so the model cannot keep looping',
+  );
+  assert.ok(
+    (lastBody?.messages ?? []).some((m) => m.role === 'user' && /more tools/i.test(m.content)),
+    'the final hop carries the "answer now" nudge',
+  );
+  assert.match(decision.reply!, /Final answer/, 'the loop terminates with a real answer, not the empty fallback');
+
+  __setToolDispatcherForTest(null);
+  restoreFetch();
+});
+
+test('LocalBrain: a tool run that yields no prose triggers a forced summary (never ends empty)', async () => {
+  let calls = 0;
+  let lastBody: { tools?: unknown[] } | undefined;
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    calls += 1;
+    lastBody = init?.body ? JSON.parse(init.body) : undefined;
+    if (calls === 1) {
+      // hop 0: the model asks for a tool, no prose yet.
+      return mockChatResponse({
+        message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'fs', arguments: { op: 'write', path: 'a.txt', content: 'x' } } }] },
+        done: true,
+      });
+    }
+    if (calls === 2) {
+      // hop 1 (after the observation): the model returns EMPTY content and no tool call.
+      return mockChatResponse({ message: { role: 'assistant', content: '' }, done: true });
+    }
+    // forced summary hop: tools dropped → the model finally narrates the result.
+    return mockChatResponse({ message: { role: 'assistant', content: 'Wrote a.txt successfully.' }, done: true });
+  }) as unknown as typeof fetch;
+
+  __setToolDispatcherForTest(async () => ({ ok: true, data: { written: true } }));
+  const decision = await new LocalBrain().reason('hello', 'ctx'); // quick gear, no deliberate signal
+  assert.equal(calls, 3, 'tool hop + empty-prose hop + a forced, tool-less summary hop');
+  assert.equal(
+    Array.isArray(lastBody?.tools) && lastBody!.tools!.length > 0,
+    false,
+    'the forced summary hop advertises NO tools',
+  );
+  assert.match(decision.reply!, /Wrote a\.txt/, 'a tool run never ends in an empty reply');
+  __setToolDispatcherForTest(null);
   restoreFetch();
 });
 

@@ -121,6 +121,19 @@ export const financeTool: Tool = {
     try {
       const accessToken = a.accessToken ?? process.env.PLAID_ACCESS_TOKEN ?? '';
 
+      // No linked account AND nothing previously synced → escalate with a clear reason instead of
+      // returning empty data (which reads to the model/owner as "the tool did nothing"). With this,
+      // a money question yields "no bank is linked yet — link one in Settings" rather than a blank.
+      if (!accessToken && store.listAccounts().length === 0) {
+        return {
+          ok: false,
+          escalation: {
+            reason: 'No bank account is linked yet, so there is no finance data to read.',
+            recommendation: 'Link an account in Settings (Plaid), then ask again.',
+          },
+        };
+      }
+
       if (a.op === 'balances' || a.op === 'transactions') {
         if (accessToken) {
           await syncFromPlaid(store, accessToken);

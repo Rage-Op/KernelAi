@@ -45,8 +45,17 @@ export const OLLAMA_CHAT_URL = 'http://localhost:11434/api/chat';
  *  comfortably on the 16 GB box (verify resident size with `ollama ps`). */
 export const OLLAMA_NUM_CTX = 16384;
 
-/** Max output tokens per pass — generous so full answers (poems, emails, lists) never truncate. */
+/** Max output tokens per QUICK pass — generous so full answers (poems, emails, lists) never truncate. */
 export const OLLAMA_NUM_PREDICT = 2048;
+
+/**
+ * Max output tokens for a DELIBERATE pass (WS-A3 reasoning upgrade). When `think:true`, qwen3.5 emits
+ * its chain-of-thought into a SEPARATE `message.thinking` channel that ALSO consumes the output budget
+ * — a small num_predict gets entirely eaten by reasoning and the visible `content` answer comes back
+ * EMPTY (verified live). So the deliberate budget is doubled to leave room for the reasoning AND a
+ * complete final answer. The owner's explicit trade: "I'd rather wait longer than get a fast dumb reply."
+ */
+export const OLLAMA_NUM_PREDICT_DELIBERATE = 4096;
 
 /** Sampling temperature — natural, complete prose (0.2 made it terse/robotic and stop early). */
 export const OLLAMA_TEMPERATURE = 0.7;
@@ -67,7 +76,6 @@ const SYSTEM_PROMPT = `You are KERNEL, Pravin's persistent personal AI agent, ru
 How you reply:
 - Natural plain prose. No JSON, no preamble like "Sure, here is".
 - Answer COMPLETELY in your reply. If asked for a poem, email, list, or explanation, produce the WHOLE thing now. NEVER announce a task ("I'll write...") and then stop — that is a failure.
-- Keep any reasoning brief; give the answer, not a plan to make one.
 - You remember the recent conversation — follow up naturally on what was just said ("it", "that", "the one you mentioned").
 
 Your tools (you decide when to use them):
@@ -82,6 +90,65 @@ When to use a tool vs. answer directly (follow these):
 - "What's my checking balance?" → finance (op=balances)
 - "Write me a haiku." / "What's 12 × 8?" / "Capital of France?" → answer directly, NO tool — you already know these.
 Don't ask permission to use web or finance — just use them when the question calls for it, then answer.`;
+
+/**
+ * Depth-specific reasoning guidance appended to the system prompt (WS-A3). The owner asked KERNEL to
+ * "activate thinking, reasoning, planning and to-do listing" on real work, while staying snappy on
+ * chat. So the brain runs two gears, chosen per-turn by `assessDepth`:
+ *   - QUICK: keep it brief and answer directly (preserves the fast, working chat path; think:false).
+ *   - DELIBERATE: think it through (think:true), lay out a short PLAN/TODO, then carry out every step
+ *     and deliver the complete result — never announce-then-stop.
+ * Splitting the guidance is what lets us turn thinking ON for hard tasks WITHOUT re-introducing the
+ * announce-then-stop rumination that the old global think:false was there to prevent.
+ */
+const QUICK_ADDENDUM =
+  'This is a simple request — keep any reasoning brief and just give the complete answer directly, no plan needed.';
+
+const DELIBERATE_ADDENDUM = `This is a multi-step or complex request — take the time to get it RIGHT (the owner prefers a slower, correct answer over a fast shallow one). Work through it like this:
+1. First, briefly lay out your PLAN as a short numbered to-do list of the steps you'll take (and which tools each step needs).
+2. Then DO every step yourself — call tools to gather what you need, read their real results, and keep going until the whole task is done.
+3. Deliver the COMPLETE result in THIS reply.
+Never stop after stating the plan, and never hand the work back to the owner. If a tool fails, adapt and try another way before giving up.`;
+
+/**
+ * A nudge appended on the FINAL tool hop (hops exhausted): drop the tools and tell the model to answer
+ * from what it already gathered. Without this a small model can burn every hop re-calling a tool and
+ * then emit the empty fallback instead of an answer (a documented failure mode).
+ */
+const FINAL_ANSWER_NUDGE =
+  'You have gathered enough information. Do NOT call any more tools — give the complete final answer NOW, using the observations above.';
+
+/**
+ * Classify an utterance into the reasoning gear. DETERMINISTIC + zero extra latency (no model call):
+ * default to QUICK (preserve the snappy path) and escalate to DELIBERATE only on clear multi-step /
+ * complex signals so trivial turns never get slower. The owner explicitly prefers erring toward
+ * deliberate on hard tasks, so the signal list is generous.
+ */
+const DELIBERATE_SIGNALS =
+  /\b(plan|step[-\s]?by[-\s]?step|steps|strateg(?:y|ize)|research|investigate|analy[sz]e|compare|comparison|design|architect|implement|build|refactor|debug|troubleshoot|figure out|work out|break ?down|outline|multi[-\s]?step|several steps|how (?:do|would|can) i|use (?:your |the )?tools?)\b/i;
+
+export function assessDepth(prompt: string, _history?: ChatTurn[]): 'quick' | 'deliberate' {
+  const p = prompt.trim();
+  if (p.length > 280) return 'deliberate'; // long asks tend to be genuinely complex
+  if (DELIBERATE_SIGNALS.test(p)) return 'deliberate';
+  if ((p.match(/\?/g) ?? []).length >= 3) return 'deliberate'; // several sub-questions in one turn
+  if (/\band\b/i.test(p) && p.length > 140) return 'deliberate'; // long, conjoined multi-part requests
+  return 'quick';
+}
+
+/** A current-date/time anchor for the system context so "today"/"now"/"this month" questions resolve
+ *  against the real clock instead of the model's stale training prior. */
+function todayLine(): string {
+  const now = new Date();
+  const date = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `Current date and time: ${date}, ${time} (local). Use this for any "today" / "now" / "this week/month/year" question.`;
+}
 
 /** A tool call as Ollama returns it in `message.tool_calls`. Arguments arrive as an object (Ollama
  *  parses them), but we normalize defensively in case a build returns a JSON string. */
@@ -127,8 +194,10 @@ interface OllamaMessage {
   tool_calls?: OllamaToolCall[];
 }
 
-/** Max tool hops before forcing a final answer — a loop guard (small models can loop on tools). */
+/** Max tool hops before forcing a final answer — a loop guard (small models can loop on tools).
+ *  Deliberate tasks get more headroom to gather evidence across several steps before answering. */
 const MAX_TOOL_HOPS = 4;
+const MAX_TOOL_HOPS_DELIBERATE = 6;
 
 /** The gated tool dispatcher (default routes through registry.dispatch so the gate stays in the
  *  path). A test seam swaps it so the tool loop runs without the real registry/network. */
@@ -182,14 +251,20 @@ export class LocalBrain implements BrainProvider {
     history?: ChatTurn[],
     onToolActivity?: (event: ToolActivityEvent) => void,
   ): Promise<Decision> {
+    // Pick the reasoning gear for this turn (WS-A3). Quick = snappy chat; deliberate = think + plan.
+    const depth = assessDepth(prompt, history);
+    const deliberate = depth === 'deliberate';
+    const addendum = deliberate ? DELIBERATE_ADDENDUM : QUICK_ADDENDUM;
     const messages: OllamaMessage[] = [
-      // system(memory+persona) → prior dialogue turns → the current utterance. The system message
-      // stays element 0 so front-truncation evicts OLD DIALOGUE before the instructions.
-      { role: 'system', content: `${context}\n\n${SYSTEM_PROMPT}` },
+      // date anchor → system(memory+persona) → depth guidance → prior dialogue turns → the current
+      // utterance. The system message stays element 0 so front-truncation evicts OLD DIALOGUE before
+      // the instructions; the date anchor leads so "today/now" questions always have a real clock.
+      { role: 'system', content: `${todayLine()}\n\n${context}\n\n${SYSTEM_PROMPT}\n\n${addendum}` },
       ...(history ?? []),
       { role: 'user', content: prompt },
     ];
-    return this.runToolLoop(messages, onToken, 0, false, onToolActivity);
+    const maxHops = deliberate ? MAX_TOOL_HOPS_DELIBERATE : MAX_TOOL_HOPS;
+    return this.runToolLoop(messages, onToken, 0, false, onToolActivity, { deliberate, maxHops });
   }
 
   /**
@@ -203,13 +278,23 @@ export class LocalBrain implements BrainProvider {
     onToken: ((chunk: string) => void) | undefined,
     depth: number,
     usedTool: boolean,
-    onToolActivity?: (event: ToolActivityEvent) => void,
+    onToolActivity: ((event: ToolActivityEvent) => void) | undefined,
+    opts: { deliberate: boolean; maxHops: number },
   ): Promise<Decision> {
-    const result = await this.chat(messages, onToken);
+    // On the final hop (tool budget exhausted) force a real answer: drop the tools and nudge the model
+    // to answer from the observations it already has, so it can't burn out re-calling tools then stall.
+    const finalHop = depth >= opts.maxHops;
+    if (finalHop) {
+      messages.push({ role: 'user', content: FINAL_ANSWER_NUDGE });
+    }
+    const result = await this.chat(messages, onToken, {
+      deliberate: opts.deliberate,
+      toolsAllowed: !finalHop,
+    });
     if (!result.ok) return result.decision;
     const { text, toolCalls, usage } = result;
 
-    if (toolCalls.length > 0 && depth < MAX_TOOL_HOPS) {
+    if (!finalHop && toolCalls.length > 0) {
       // record the assistant's tool-call turn, then run each call and append its observation.
       messages.push({ role: 'assistant', content: text, tool_calls: toolCalls });
       const dispatch = dispatcherOverride ?? defaultDispatch;
@@ -229,14 +314,26 @@ export class LocalBrain implements BrainProvider {
           ),
         });
       }
-      return this.runToolLoop(messages, onToken, depth + 1, true, onToolActivity);
+      return this.runToolLoop(messages, onToken, depth + 1, true, onToolActivity, opts);
     }
 
-    const reply = text.trim();
+    let reply = text.trim();
+    let finalUsage = usage;
+    // If the model USED tools but produced NO prose, force one tool-less summary hop so a tool run can
+    // never end in a silent/empty "I did nothing" reply (a documented small-model failure mode — it
+    // sometimes stops after the observation without narrating the result). Bounded: one extra hop.
+    if (!reply && usedTool && !finalHop) {
+      messages.push({ role: 'user', content: FINAL_ANSWER_NUDGE });
+      const forced = await this.chat(messages, onToken, { deliberate: opts.deliberate, toolsAllowed: false });
+      if (forced.ok) {
+        reply = forced.text.trim();
+        finalUsage = forced.usage;
+      }
+    }
     return {
       thought: usedTool ? 'local reply (after tool use)' : 'local reply',
       reply: reply.length ? reply : 'Local brain returned an empty reply.',
-      usage,
+      usage: finalUsage,
     };
   }
 
@@ -248,8 +345,11 @@ export class LocalBrain implements BrainProvider {
   private async chat(
     messages: OllamaMessage[],
     onToken?: (chunk: string) => void,
+    opts?: { deliberate?: boolean; toolsAllowed?: boolean },
   ): Promise<ChatOk | ChatErr> {
     const stream = typeof onToken === 'function';
+    const deliberate = opts?.deliberate ?? false;
+    const toolsAllowed = opts?.toolsAllowed ?? true;
     let res: Response;
     try {
       res = await fetch(OLLAMA_CHAT_URL, {
@@ -258,16 +358,19 @@ export class LocalBrain implements BrainProvider {
         body: JSON.stringify({
           model: OLLAMA_MODEL,
           messages,
-          tools: localToolSpecs(), // the model decides WHEN to call these (see WEB_TOOL_DESCRIPTION).
+          // Advertise the tool catalog so the model decides WHEN to call a tool — EXCEPT on the forced
+          // final hop, where we omit tools entirely so Ollama can't emit a tool_call and must answer.
+          ...(toolsAllowed ? { tools: localToolSpecs() } : {}),
           stream,
-          // qwen3.5 is thinking-capable; keep thinking OFF for the orchestration loop — non-thinking
-          // mode dispatches eagerly, ~40% fewer tokens/latency, and avoids the <think>-rumination
-          // that reproduces the announce-then-stop failure. Hard reasoning escalates to Cloud.
-          think: false,
+          // WS-A3 reasoning gear. QUICK turns keep thinking OFF — non-thinking mode dispatches eagerly,
+          // ~40% fewer tokens/latency, and avoids the <think>-rumination that reproduced the
+          // announce-then-stop failure. DELIBERATE turns turn thinking ON (with a doubled output budget,
+          // since reasoning shares it) so hard tasks get the depth the owner asked for.
+          think: deliberate,
           options: {
             temperature: OLLAMA_TEMPERATURE,
             num_ctx: OLLAMA_NUM_CTX,
-            num_predict: OLLAMA_NUM_PREDICT,
+            num_predict: deliberate ? OLLAMA_NUM_PREDICT_DELIBERATE : OLLAMA_NUM_PREDICT,
           },
           // keep_alive intentionally OMITTED — never -1 (16GB idle-unload, BRAIN-03 / Pitfall 3).
         }),

@@ -1,0 +1,137 @@
+/**
+ * tools/shell.ts (HANDS-06) — KERNEL's shell hands: run a command and return stdout/stderr/exit code.
+ * The brain references this via ToolCall.tool='shell'. Tier is assigned CENTRALLY by classifyTier
+ * (which routes shell calls through exec-policy.classifyCommand): a read-only allowlisted command is
+ * GREEN (auto), a general command is YELLOW (proceed+notify), a destructive one is RED (the live
+ * breaker's cancel window). The gate is the only path to execute — this file never self-authorizes.
+ *
+ * Two safety guards the gate can't provide live here (defense in depth):
+ *   - CATASTROPHIC REFUSAL: sudo, root/home `rm -rf`, disk wipes, fork bombs, `curl … | sh`, etc. are
+ *     refused outright even if the breaker would otherwise time out and proceed (exec-policy).
+ *   - SECRET-SAFE ENV: the child process runs with an env that STRIPS secret-looking vars
+ *     (*_KEY/*_TOKEN/*_SECRET/PASSWORD/TAVILY/ANTHROPIC/PLAID) so a command like `env` can't exfiltrate
+ *     the owner's keys into the model's context.
+ *
+ * Never throws across the dispatch boundary — timeouts/spawn errors return a typed escalation; a
+ * non-zero exit is a normal result (returned with its output so the model can react).
+ */
+import { exec } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
+import { promisify } from 'node:util';
+import { z } from 'zod';
+
+import { register } from './registry.js';
+import type { Tool, ToolResult } from './Tool.js';
+import { logger } from '../memory/log.js';
+import { config } from '../config.js';
+import { isCatastrophic, isSecretPath, resolveUserPath } from '../safety/exec-policy.js';
+
+const execAsync = promisify(exec);
+
+/** Wall-clock limit for a command (ms). Long-running jobs should be launched, not awaited here. */
+const SHELL_TIMEOUT_MS = 30_000;
+/** Hard cap on captured output bytes (protects the daemon); slice further for the model below. */
+const MAX_BUFFER_BYTES = 1024 * 1024;
+/** Per-stream output returned to the model (keeps the small model's context manageable). */
+const MAX_RETURN_CHARS = 8000;
+
+export const shellArgsSchema = z
+  .object({
+    op: z.enum(['exec']).default('exec'),
+    /** The full shell command to run. */
+    command: z.string().min(1),
+    /** Working directory (`~`/relative resolve against the workspace). Defaults to the workspace. */
+    cwd: z.string().optional(),
+  })
+  .strict();
+
+type ShellArgs = z.infer<typeof shellArgsSchema>;
+
+export const SHELL_TOOL_DESCRIPTION =
+  'Run a shell command on this Mac and get its stdout, stderr and exit code. Use it to list files, ' +
+  'run scripts, use git, build/test code, or search. Read-only commands run immediately; commands ' +
+  "that change the system run with a notice, and destructive ones need the owner's approval. Pass the " +
+  'full command string in `command`.';
+
+/** Build a child-process env that strips secret-looking variables (no key exfiltration via `env`). */
+function sanitizedEnv(): NodeJS.ProcessEnv {
+  const SECRET_KEY = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|PLAID|ANTHROPIC|TAVILY|CREDENTIAL|API)/i;
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (SECRET_KEY.test(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+export const shellTool: Tool = {
+  name: 'shell',
+  schema: shellArgsSchema,
+  async execute(args): Promise<ToolResult> {
+    const a = args as ShellArgs;
+    const command = a.command.trim();
+
+    // CATASTROPHIC refusal — never run, regardless of tier/breaker outcome.
+    const cat = isCatastrophic(command);
+    if (cat.bad) {
+      logger.warn({ tool: 'shell', reason: cat.reason }, 'shell: refused catastrophic command');
+      return {
+        ok: false,
+        escalation: {
+          reason: `refusing to run a catastrophic command (${cat.reason}).`,
+          recommendation: 'Pravin runs system-level/destructive commands manually.',
+        },
+      };
+    }
+
+    // Resolve the cwd against the workspace; never run from inside a secret directory.
+    const cwd = resolveUserPath(a.cwd ?? '.', config.workspaceDir);
+    if (isSecretPath(cwd)) {
+      return { ok: false, escalation: { reason: `refusing to run inside a secret path (${cwd}).` } };
+    }
+    // Make sure the default workspace exists so a first command there doesn't fail with ENOENT.
+    await fsp.mkdir(config.workspaceDir, { recursive: true }).catch(() => {});
+
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        cwd,
+        env: sanitizedEnv(),
+        timeout: SHELL_TIMEOUT_MS,
+        maxBuffer: MAX_BUFFER_BYTES,
+        windowsHide: true,
+      });
+      logger.info({ tool: 'shell' }, 'shell: command completed (exit 0)');
+      return {
+        ok: true,
+        data: {
+          op: 'exec', command, exitCode: 0,
+          stdout: stdout.slice(0, MAX_RETURN_CHARS),
+          stderr: stderr.slice(0, MAX_RETURN_CHARS),
+        },
+      };
+    } catch (err) {
+      const e = err as { killed?: boolean; code?: number | string; signal?: string; stdout?: string; stderr?: string; message?: string };
+      // a timeout / kill is a real failure → escalate.
+      if (e.killed || e.signal === 'SIGTERM') {
+        return { ok: false, escalation: { reason: `shell command timed out after ${SHELL_TIMEOUT_MS / 1000}s.` } };
+      }
+      // a non-zero EXIT is a normal result the model should see — return it with the output.
+      if (typeof e.code === 'number') {
+        logger.info({ tool: 'shell', code: e.code }, 'shell: command exited non-zero');
+        return {
+          ok: true,
+          data: {
+            op: 'exec', command, exitCode: e.code,
+            stdout: (e.stdout ?? '').slice(0, MAX_RETURN_CHARS),
+            stderr: (e.stderr ?? '').slice(0, MAX_RETURN_CHARS),
+          },
+        };
+      }
+      // spawn failure (command not found, etc.).
+      return { ok: false, escalation: { reason: `shell command failed: ${e.message ?? 'spawn error'}` } };
+    }
+  },
+};
+
+// Module-init side effect: importing this tool wires it into the router (HANDS-04).
+register(shellTool);

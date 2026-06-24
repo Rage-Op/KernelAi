@@ -15,6 +15,7 @@
  * Phase 2 (default-deny). The matchers are reviewed, extensible top-level constants.
  */
 import type { ToolCall } from '../brain/BrainProvider.js';
+import { classifyCommand } from './exec-policy.js';
 
 export type Tier = 'green' | 'yellow' | 'red';
 
@@ -49,6 +50,8 @@ const GREEN_OPS = new Set<string>([
   'balances',
   'transactions',
   'aggregate',
+  // Filesystem read ops (HANDS-06) — reversible reads of files/dirs.
+  'stat',
 ]);
 
 /** Recoverable ops (a lasting but reversible change): label `yellow`. */
@@ -65,6 +68,11 @@ const YELLOW_OPS = new Set<string>([
   'install',
   'move',
   'rename',
+  // Filesystem mutating-but-recoverable ops (HANDS-06): create/overwrite a file, edit, make a dir.
+  'write',
+  'edit',
+  'create',
+  'mkdir',
 ]);
 
 /** Irreversible / financial ops: label `red`. Also the default for anything unrecognized. */
@@ -98,6 +106,14 @@ function operationOf(call: ToolCall): string {
  * `rm -rf` and similar destructive text in the op normalize to a Red match.
  */
 export function classifyTier(call: ToolCall): Tier {
+  // HANDS-06: a `shell` call is classified by its COMMAND (read-only allowlist → green, destructive →
+  // red, otherwise yellow) via exec-policy. When no command is present we fall through to the op-based
+  // path (so a `{tool:'shell', op:'rm -rf'}` test call still classifies red the legacy way).
+  if (call.tool === 'shell') {
+    const command = typeof call.args?.command === 'string' ? call.args.command : '';
+    if (command.trim()) return classifyCommand(command);
+  }
+
   const op = operationOf(call);
 
   // explicit Red signals (including destructive shell-ish text like "rm -rf").

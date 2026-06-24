@@ -1,14 +1,18 @@
 /**
- * specs.ts (WS-A4) — the tools ADVERTISED to the local model's autonomous loop, in Ollama's native
- * function-calling shape. This is deliberately a CURATED list, NOT the whole registry: only SAFE,
- * read-only (GREEN) capabilities the small model may drive on its own without a gate prompt. Kept
- * short with one-line descriptions (small-model best practice — long tool docs degrade selection).
+ * specs.ts (WS-A4 / HANDS-06) — the tools ADVERTISED to the local model's autonomous loop, in Ollama's
+ * native function-calling shape. This is a CURATED list (not the whole registry), kept SHORT with
+ * one-line descriptions (small-model best practice — long tool docs degrade selection).
  *
- * Anything riskier (send mail, fill forms, finance writes — none exist read-only) stays OFF this
- * list; those route through the owner-in-the-loop paths, never the model's autonomous tool loop.
- * Extend deliberately, and keep the count ≤ 8.
+ * Originally this was read-only/GREEN only, to keep a small model from driving risky actions on its
+ * own. With the graduated tiered gate now in force (HANDS-06), it is SAFE to advertise the `fs` and
+ * `shell` hands too: whatever the model proposes, classifyTier + gate.authorize enforce the tier on
+ * EVERY call — reads run, writes proceed-and-notify, and destructive ops route through the live breaker
+ * (owner cancel window) before anything happens. The model can therefore reach for real computer
+ * control, while the chokepoint — not the model — decides what actually executes. Keep the count ≤ 8.
  */
 import { WEB_TOOL_DESCRIPTION } from './web.js';
+import { FS_TOOL_DESCRIPTION } from './fs.js';
+import { SHELL_TOOL_DESCRIPTION } from './shell.js';
 
 /** Ollama `/api/chat` native tool spec. */
 export interface OllamaToolSpec {
@@ -20,9 +24,9 @@ export interface OllamaToolSpec {
   };
 }
 
-/** The curated tool catalog advertised to LocalBrain's loop. Keep it SHORT (≤8) and read-only/GREEN
- *  so the small model can drive these autonomously without a gate prompt. Riskier capabilities
- *  (sending mail, filling forms, finance writes) are NOT here — they route through owner-in-the-loop. */
+/** The curated tool catalog advertised to LocalBrain's loop. Tiering is enforced by the gate on every
+ *  call (see header), so this can include the graduated `fs`/`shell` hands as well as the read-only
+ *  `web`/`finance` tools. Keep it SHORT (≤8). */
 export function localToolSpecs(): OllamaToolSpec[] {
   return [
     {
@@ -69,6 +73,44 @@ export function localToolSpecs(): OllamaToolSpec[] {
             },
           },
           required: ['op'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'fs',
+        description: FS_TOOL_DESCRIPTION,
+        parameters: {
+          type: 'object',
+          properties: {
+            op: {
+              type: 'string',
+              enum: ['read', 'list', 'stat', 'write', 'edit', 'mkdir', 'move', 'delete'],
+              description: 'read/list/stat are safe reads; write/edit/mkdir/move change files; delete needs approval',
+            },
+            path: { type: 'string', description: 'the target file or directory path' },
+            content: { type: 'string', description: 'full file contents (op=write)' },
+            find: { type: 'string', description: 'exact text to replace (op=edit)' },
+            replace: { type: 'string', description: 'replacement text (op=edit)' },
+            dest: { type: 'string', description: 'destination path (op=move)' },
+          },
+          required: ['op'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'shell',
+        description: SHELL_TOOL_DESCRIPTION,
+        parameters: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'the full shell command to run' },
+            cwd: { type: 'string', description: 'optional working directory (defaults to the workspace)' },
+          },
+          required: ['command'],
         },
       },
     },
