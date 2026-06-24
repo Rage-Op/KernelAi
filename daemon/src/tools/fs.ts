@@ -21,7 +21,7 @@ import { register } from './registry.js';
 import type { Tool, ToolResult } from './Tool.js';
 import { logger } from '../memory/log.js';
 import { config } from '../config.js';
-import { isSecretPath, isWithin, resolveUserPath } from '../safety/exec-policy.js';
+import { isSecretPath, isWithin, resolveUserPath, canonicalize } from '../safety/exec-policy.js';
 
 /** Cap a file read so a huge file can't blow the small model's context window. */
 const MAX_READ_BYTES = 64 * 1024;
@@ -58,10 +58,12 @@ const esc = (reason: string, recommendation?: string): ToolResult => ({
   escalation: { reason, ...(recommendation ? { recommendation } : {}) },
 });
 
-/** Resolve the user path against the workspace root, applying the secret fence (read + write). */
+/** Resolve the user path against the workspace root, applying the secret fence (read + write).
+ *  Paths are CANONICALIZED (realpath: symlinks, `..`, /private aliasing, case) before the fence so a
+ *  symlink/case/alias trick can't reach a secret or escape the workspace (audit #7/#8/#11/#20). */
 function resolveAndFence(p: string | undefined): { abs: string } | ToolResult {
   if (!p || !p.trim()) return esc('fs: a `path` is required.');
-  const abs = resolveUserPath(p, config.workspaceDir);
+  const abs = canonicalize(resolveUserPath(p, config.workspaceDir));
   if (isSecretPath(abs)) {
     return esc(
       `refusing to access a credential/secret path (${path.basename(abs)}).`,
@@ -107,10 +109,13 @@ export const fsTool: Tool = {
         }
         case 'list': {
           const entries = await fsp.readdir(abs, { withFileTypes: true });
+          // Filter out entries that canonicalize to a secret so a listing can't enumerate secret
+          // filenames for a targeted follow-up read (audit #21).
           const items = entries
+            .filter((e) => !isSecretPath(canonicalize(path.join(abs, e.name))))
             .slice(0, MAX_LIST_ENTRIES)
             .map((e) => ({ name: e.name, kind: e.isDirectory() ? 'dir' : 'file' }));
-          return { ok: true, data: { op: 'list', path: abs, count: entries.length, items } };
+          return { ok: true, data: { op: 'list', path: abs, count: items.length, items } };
         }
         case 'stat': {
           const stat = await fsp.stat(abs);

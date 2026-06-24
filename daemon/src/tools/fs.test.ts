@@ -71,3 +71,29 @@ test('fs: delete removes a workspace file', async (t) => {
   const r = await fsTool.execute({ op: 'read', path: file });
   assert.equal(r.ok, false, 'the file is gone after delete');
 });
+
+test('fs: a workspace symlink pointing at a secret is refused (canonicalized fence, audit #7)', async (t) => {
+  t.after(cleanup);
+  const secret = path.join(os.tmpdir(), `kfs-secret-${process.pid}.pem`);
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.writeFile(secret, 'PRIVATE KEY');
+  const link = path.join(dir, 'innocent.txt');
+  await fsp.symlink(secret, link).catch(() => {});
+  const r = await fsTool.execute({ op: 'read', path: link });
+  await fsp.rm(secret, { force: true });
+  assert.equal(r.ok, false);
+  assert.match(r.escalation!.reason, /secret|credential/i);
+});
+
+test('fs: writing through a directory symlink that escapes the workspace is refused (audit #8)', async (t) => {
+  t.after(cleanup);
+  const outside = path.join(os.tmpdir(), `kfs-out-${process.pid}`);
+  await fsp.mkdir(outside, { recursive: true });
+  await fsp.mkdir(dir, { recursive: true });
+  const dlink = path.join(dir, 'up');
+  await fsp.symlink(outside, dlink).catch(() => {});
+  const r = await fsTool.execute({ op: 'write', path: path.join(dlink, 'escape.txt'), content: 'x' });
+  await fsp.rm(outside, { recursive: true, force: true });
+  assert.equal(r.ok, false);
+  assert.match(r.escalation!.reason, /workspace/i);
+});

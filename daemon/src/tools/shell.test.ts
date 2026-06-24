@@ -1,7 +1,7 @@
 /**
- * shell.test.ts (HANDS-06) — the shell tool's own guards: it runs a command and returns output,
- * surfaces a non-zero exit as a normal result, refuses catastrophic commands outright, and runs the
- * child with a SECRET-STRIPPED env so a command cannot exfiltrate the owner's keys.
+ * shell.test.ts (HANDS-06) — the shell tool's own guards (audit-hardened): run a command + return
+ * output, surface a non-zero exit, refuse catastrophic commands AND any command that touches a secret
+ * path, run the child with an ALLOWLIST env (no key exfiltration), and redact secret-shaped output.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,22 +22,40 @@ test('shell: a non-zero exit is returned as a normal result with its code', asyn
   assert.equal((r.data as { exitCode: number }).exitCode, 3);
 });
 
-test('shell: refuses a catastrophic command outright (never runs)', async () => {
-  const r = await shellTool.execute({ op: 'exec', command: 'sudo rm -rf /', cwd: '/tmp' });
-  assert.equal(r.ok, false);
-  assert.match(r.escalation!.reason, /catastrophic/i);
+test('shell: refuses catastrophic commands outright (never runs)', async () => {
+  for (const command of ['sudo rm -rf /', 'find / -delete', 'bash -c "rm -rf /"', "osascript -e 'do shell script \"x\" with administrator privileges'"]) {
+    const r = await shellTool.execute({ op: 'exec', command, cwd: '/tmp' });
+    assert.equal(r.ok, false, command);
+    assert.match(r.escalation!.reason, /catastrophic/i, command);
+  }
 });
 
-test('shell: the child env strips secret-looking variables (no key exfiltration)', async () => {
+test('shell: refuses a command that references a secret path (cat ~/.kernel.env)', async () => {
+  for (const command of ['cat ~/.kernel.env', 'cat ~/.ssh/id_rsa', 'openssl base64 -in ~/.kernel.env']) {
+    const r = await shellTool.execute({ op: 'exec', command, cwd: '/tmp' });
+    assert.equal(r.ok, false, command);
+    assert.match(r.escalation!.reason, /secret|credential/i, command);
+  }
+});
+
+test('shell: the child env is an ALLOWLIST — secret-named/valued vars never reach the child', async () => {
   process.env.FAKE_API_KEY = 'super-secret-value';
-  process.env.SAFE_VAR = 'ok';
+  process.env.DATABASE_URL = 'postgres://u:p@h/db';
   try {
-    const r = await shellTool.execute({ op: 'exec', command: 'echo "k=$FAKE_API_KEY safe=$SAFE_VAR"', cwd: '/tmp' });
+    const r = await shellTool.execute({ op: 'exec', command: 'echo "k=$FAKE_API_KEY db=$DATABASE_URL home=$HOME"', cwd: '/tmp' });
     const out = (r.data as { stdout: string }).stdout;
-    assert.doesNotMatch(out, /super-secret-value/, 'a secret-looking var is stripped from the child env');
-    assert.match(out, /safe=ok/, 'a non-secret var still passes through');
+    assert.doesNotMatch(out, /super-secret-value/, 'secret-named var dropped');
+    assert.doesNotMatch(out, /postgres:\/\//, 'secret-valued var dropped');
+    assert.match(out, /home=\//, 'an allowlisted var (HOME) still passes through');
   } finally {
     delete process.env.FAKE_API_KEY;
-    delete process.env.SAFE_VAR;
+    delete process.env.DATABASE_URL;
   }
+});
+
+test('shell: secret-shaped values are redacted from stdout before reaching the model', async () => {
+  const r = await shellTool.execute({ op: 'exec', command: 'echo "leak ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 done"', cwd: '/tmp' });
+  const out = (r.data as { stdout: string }).stdout;
+  assert.match(out, /\[redacted-secret\]/, 'token redacted');
+  assert.doesNotMatch(out, /ghp_ABCDEFGH/, 'raw token never reaches the model');
 });
