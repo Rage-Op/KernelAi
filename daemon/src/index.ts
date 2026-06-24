@@ -18,8 +18,9 @@ import { logger } from './memory/log.js';
 import { bootBuildStamp } from './build-stamp.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import { startIpcServer, probeDaemonAlive } from './ipc/server.js';
-import { applySettings, loadPersistedBrain } from './settings.js';
+import { applySettings, loadPersistedBrain, currentBrainSelection } from './settings.js';
 import { restoreOwnerConfig } from './safety/owner-config.js';
+import { warmupActiveBrain } from './brain/readiness.js';
 import { conversation } from './memory/conversation.js';
 import { registerBuiltinTools } from './tools/register-builtins.js';
 import { runHeartbeat } from './heartbeat.js';
@@ -118,6 +119,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     { socketPath: config.socketPath, build: bootBuildStamp() },
     'KERNEL daemon online — IPC listening',
   );
+
+  // BRAIN-07: start warming the active model the moment we're online — by the time the Face connects
+  // (or right after, mid-warm-up) the model is loading or already resident, so the boot screen can
+  // gate on `model.state:ready` and the owner's first prompt is never a cold start. Fire-and-forget:
+  // progress broadcasts as `model.state` frames; a warm-up failure resolves to `error` (never throws).
+  void warmupActiveBrain(currentBrainSelection());
 
   // Keep the process resident; gracefully close the socket on termination signals.
   const shutdown = (signal: string) => {

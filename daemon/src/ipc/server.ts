@@ -26,6 +26,7 @@ import { signalBreakerCancel, setBreakerBroadcast, listTools } from '../tools/re
 import { overrideSingleton } from '../safety/override.js';
 import { applyOwnerConfig, ownerConfig, defaultOverrideTtlMs } from '../safety/owner-config.js';
 import { readAudit, defaultAuditPath } from '../safety/audit.js';
+import { getModelState, setModelBroadcast, warmupActiveBrain } from '../brain/readiness.js';
 import { CLOUD_PRICE_PER_TOKEN } from '../brain/pricing.js';
 import { recordTurn } from '../commands/session-usage.js';
 import { conversation } from '../memory/conversation.js';
@@ -65,6 +66,11 @@ function buildCapabilities(): Frame {
 /** Build the live `/override` state frame (the Face's status pill + countdown source). */
 function buildOverrideState(): Frame {
   return { type: 'override.state', ...overrideSingleton().snapshot() };
+}
+
+/** Build the current model-readiness frame (the Face's boot gate). */
+function buildModelState(): Frame {
+  return { type: 'model.state', ...getModelState() };
 }
 
 /** Build the current owner safety-posture frame (the Settings page's source of truth). */
@@ -260,6 +266,10 @@ export function startIpc(
     return id;
   });
 
+  // BRAIN-07: model warm-up progress (loading→ready/error) broadcasts to every connected Face so the
+  // boot screen can advance only when the model is truly ready. Injected here (no readiness↔server cycle).
+  setModelBroadcast((state) => broadcast({ type: 'model.state', ...state }));
+
   const server = net.createServer((conn) => {
     // MAINT-04: if dist was rebuilt since this process booted, a launchd-owned daemon exits here so
     // launchd relaunches it on the fresh code (automating the rebuild+kickstart). A no-op unless
@@ -276,6 +286,10 @@ export function startIpc(
     // them is unaffected; both are also broadcast on change so the Face never polls.
     send(conn, buildOverrideState());
     send(conn, buildSettingsState());
+    // And the current model readiness (BRAIN-07) so a Face attaching to an ALREADY-WARM daemon
+    // transitions off its boot screen instantly; a Face attaching mid-warm-up sees `loading` and
+    // waits, then the broadcast flips it to `ready`.
+    send(conn, buildModelState());
     attachReader(conn, onFrame);
     const drop = () => clients.delete(conn);
     conn.on('close', drop);
@@ -357,6 +371,9 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
       // P3 ADDITIVE arm: swap the active brain via the existing setBrain seam (settings.ts).
       // The 7B helper is unaffected. No reply frame in P3 — the toggle is fire-and-apply.
       applySettings(frame.brain);
+      // Re-warm for the newly-selected brain so model.state reflects the switch (local → load the
+      // model; cloud → ready immediately). Fire-and-forget; progress broadcasts as it resolves.
+      void warmupActiveBrain(frame.brain);
       break;
     case 'override':
       // P5 ADDITIVE arm (SAFE-02): the Face activates/deactivates the scoped /override

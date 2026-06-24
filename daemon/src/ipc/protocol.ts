@@ -372,6 +372,20 @@ export const AuditDataSchema = z.object({
 });
 
 /**
+ * ADDITIVE arm (daemon→Face): model warm-up readiness (BRAIN-07), broadcast on connect and as the
+ * active model loads. The Face holds its boot screen until `status:'ready'` so the owner never types
+ * into a cold model; `error` surfaces an actionable `detail` (Ollama down / model not installed).
+ * `model` is the tag (local brain). Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const ModelStateSchema = z.object({
+  type: z.literal('model.state'),
+  status: z.enum(['loading', 'ready', 'error']),
+  brain: z.enum(['cloud', 'local']),
+  model: z.string().optional(),
+  detail: z.string().optional(),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
  * plus the designed-for P2/P3/P4/P5 shapes. `safeParse` every incoming line against this.
  */
@@ -406,6 +420,7 @@ export const FrameSchema = z.discriminatedUnion('type', [
   OverrideStateSchema, // additive (daemon→Face live /override state for the status pill + countdown)
   SettingsStateSchema, // additive (daemon→Face current owner safety posture for the Settings page)
   AuditDataSchema, // additive (daemon→Face recent audit entries for the Activity view)
+  ModelStateSchema, // additive (daemon→Face model warm-up readiness for the boot gate)
 ]);
 
 /** Any valid frame. */
@@ -440,6 +455,7 @@ export type SettingsUpdate = z.infer<typeof SettingsUpdateSchema>;
 export type SettingsState = z.infer<typeof SettingsStateSchema>;
 export type AuditQuery = z.infer<typeof AuditQuerySchema>;
 export type AuditData = z.infer<typeof AuditDataSchema>;
+export type ModelStateFrame = z.infer<typeof ModelStateSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

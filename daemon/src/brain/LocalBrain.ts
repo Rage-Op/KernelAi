@@ -36,8 +36,12 @@ import { localToolSpecs } from '../tools/specs.js';
  *  `qwen3.5:4b` (~3.4 GB). Cloud `claude-opus-4-8` remains the hard-reasoning escalation tier. */
 export const OLLAMA_MODEL = 'qwen3.5:9b';
 
-/** The Ollama chat endpoint (local-only; no network port crosses a trust boundary). */
-export const OLLAMA_CHAT_URL = 'http://localhost:11434/api/chat';
+/** The Ollama server base URL (local-only; no network port crosses a trust boundary). Override with
+ *  KERNEL_OLLAMA_URL for a non-default host/port. The chat/tags/generate endpoints derive from it. */
+export const OLLAMA_BASE_URL = process.env.KERNEL_OLLAMA_URL?.trim() || 'http://localhost:11434';
+
+/** The Ollama chat endpoint. */
+export const OLLAMA_CHAT_URL = `${OLLAMA_BASE_URL}/api/chat`;
 
 /** The context window (tokens) requested per pass. Surfaced in usage so a client can show it.
  *  Raised to 16384 once short-term conversation history was added: system(memory+persona) + the

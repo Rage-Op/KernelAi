@@ -78,6 +78,10 @@ test('protocol: control-surface frames round-trip (additive — override.state /
     }).success,
     true,
   );
+  // model.state (boot gate) — status constrained; model/detail optional
+  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'loading', brain: 'local', model: 'qwen3.5:9b', detail: 'Loading…' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'ready', brain: 'cloud' }).success, true, 'model/detail optional');
+  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'bogus', brain: 'local' }).success, false, 'status is loading|ready|error');
 });
 
 test('protocol: history.request / history.data round-trip (additive, persisted chat history)', () => {

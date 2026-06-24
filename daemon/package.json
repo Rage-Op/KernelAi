@@ -15,6 +15,7 @@
     "start": "node dist/index.js",
     "heartbeat": "node dist/index.js --heartbeat",
     "chat": "node scripts/chat.mjs",
+    "status": "node scripts/kernel-status.mjs",
     "mcp": "node scripts/kernel-mcp.mjs",
     "test": "tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\""
   },
