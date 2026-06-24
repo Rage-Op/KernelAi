@@ -29,7 +29,11 @@ import matter from 'gray-matter';
 import { config } from '../config.js';
 import { assertNotIdentityPath } from './identity.js';
 import { logger } from './log.js';
+import { refreshScratchpad } from './scratchpad.js';
 import type { Provenance } from './types.js';
+
+/** How many of the FRESHEST durable facts are distilled into the always-injected current.md. */
+const SCRATCHPAD_FRESH_FACTS = 6;
 
 /** A single fact distilled from a log session block. */
 interface DistilledFact {
@@ -53,6 +57,8 @@ export interface ConsolidationResult {
   promoted: number;
   /** Number of external-sourced facts summarized-for-recall but NEVER promoted. */
   externalSummarized: number;
+  /** Number of fresh durable facts distilled INTO the always-injected current.md scratchpad. */
+  scratchpadRefreshed: number;
 }
 
 const REFLECTIONS_SUBDIR = path.join('working-memory', 'reflections');
@@ -207,6 +213,9 @@ export async function runConsolidation(
   let reflectionsWritten = 0;
   let promoted = 0;
   let externalSummarized = 0;
+  // Durable facts accumulated across all logs, in chronological order (logs are date-sorted and
+  // sessions are in-file order), so the TAIL is the freshest — that's what the scratchpad gets.
+  const durableInOrder: DistilledFact[] = [];
 
   for (const log of logs) {
     const facts = parseLog(log);
@@ -225,14 +234,29 @@ export async function runConsolidation(
       if (isDurable(fact)) {
         promoteFact(memoryDir, fact, date);
         promoted++;
+        durableInOrder.push(fact);
       }
     }
   }
 
+  // Keep the always-injected current.md FRESH: distill the newest durable source:user|self facts
+  // into the "Active Threads" section (the WRITER current.md never had — it used to go stale).
+  // External facts are unrepresentable here (durableInOrder only holds source !== 'external'); an
+  // external-only run leaves current.md untouched (refreshScratchpad is a no-op on zero items).
+  const freshest = durableInOrder.slice(-SCRATCHPAD_FRESH_FACTS).map((f) => f.text);
+  const scratchpadRefreshed = refreshScratchpad(memoryDir, 'Active Threads', freshest);
+
   logger.info(
-    { event: 'consolidate.run', logsRead: logs.length, reflectionsWritten, promoted, externalSummarized },
+    {
+      event: 'consolidate.run',
+      logsRead: logs.length,
+      reflectionsWritten,
+      promoted,
+      externalSummarized,
+      scratchpadRefreshed,
+    },
     'consolidation complete',
   );
 
-  return { logsRead: logs.length, reflectionsWritten, promoted, externalSummarized };
+  return { logsRead: logs.length, reflectionsWritten, promoted, externalSummarized, scratchpadRefreshed };
 }

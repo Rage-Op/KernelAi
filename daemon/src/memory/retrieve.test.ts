@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { retrieveAndRerank, score, tokenize } from './retrieve.js';
+import { retrieveAndRerank, score, tokenize, stem, expand } from './retrieve.js';
 
 /** Seed a temp memory dir with the retrieval candidate dirs. */
 function makeMemoryDir(): string {
@@ -29,6 +29,37 @@ test('tokenize returns a lowercase Set of [a-z0-9]+ tokens', () => {
   const t = tokenize('Hello, WORLD! foo_bar 42');
   assert.ok(t instanceof Set);
   assert.deepEqual([...t].sort(), ['42', 'bar', 'foo', 'hello', 'world']);
+});
+
+test('stem strips common inflections but leaves short words and double-s intact', () => {
+  assert.equal(stem('tasks'), 'task');
+  assert.equal(stem('deploying'), 'deploy');
+  assert.equal(stem('deployed'), 'deploy');
+  assert.equal(stem('policies'), 'policy');
+  assert.equal(stem('boxes'), 'box');
+  assert.equal(stem('address'), 'address'); // double-s not stripped
+  assert.equal(stem('the'), 'the'); // too short to stem
+});
+
+test('expand adds stems + synonyms (additively) so vocabulary mismatch still overlaps', () => {
+  const q = expand(tokenize('how are my finances'));
+  assert.ok(q.has('finance'), 'finances → finance (synonym/stem)');
+  const doc = expand(tokenize('reviewed his spending and budget this month'));
+  assert.ok(doc.has('finance'), 'spending/budget → finance');
+  // the shared concept token bridges the two different vocabularies
+  assert.ok([...q].some((t) => doc.has(t) && t === 'finance'), 'finance bridges query↔doc');
+});
+
+test('normalization lets a "finances" query match a "spending" doc (was 0 overlap before)', () => {
+  const query = tokenize('my finances');
+  const matched = score(query, { text: 'tracked monthly spending', path: 'knowledge/x.md', ageDays: 0 });
+  assert.ok(matched > 0, `synonym overlap gives a positive score, got ${matched}`);
+});
+
+test('a full literal match still scores exactly as before normalization (additive invariant)', () => {
+  const query = tokenize('deploy kernel');
+  const s = score(query, { text: 'deploy kernel', path: 'knowledge/x.md', ageDays: 0 });
+  assert.ok(Math.abs(s - 1.5) < 1e-6, `literal full match ≈ 1.5, got ${s}`);
 });
 
 test('score = keywordOverlap × recencyMult × authority', () => {

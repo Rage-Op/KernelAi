@@ -46,6 +46,67 @@ export function tokenize(s: string): Set<string> {
   return new Set(s.toLowerCase().match(/[a-z0-9]+/g) ?? []);
 }
 
+/**
+ * A small surface→concept synonym/alias map so a query and a doc that use DIFFERENT words for the
+ * same idea still overlap ("finances"/"spending"/"budget" → `finance`; "emails"/"inbox" → `mail`).
+ * Keyword-only retrieval is otherwise brittle to vocabulary mismatch; this is the cheap, dependency-
+ * free stand-in for embeddings (which the 16GB ceiling rules out). Expansion is ADDITIVE — the
+ * original token is always kept too — and applied symmetrically to query and doc, so a full literal
+ * match still scores exactly as before (the existing score() invariants are preserved).
+ */
+const SYNONYMS: Record<string, string> = {
+  // money
+  finances: 'finance', financial: 'finance', money: 'finance', spending: 'finance', spend: 'finance',
+  budget: 'finance', budgets: 'finance', expense: 'finance', expenses: 'finance', cost: 'finance',
+  costs: 'finance', payment: 'finance', payments: 'finance', transaction: 'finance', transactions: 'finance',
+  invoice: 'finance', invoices: 'finance', bill: 'finance', bills: 'finance',
+  // mail
+  email: 'mail', emails: 'mail', inbox: 'mail', message: 'mail', messages: 'mail', gmail: 'mail',
+  // calendar
+  schedule: 'calendar', calendars: 'calendar', meeting: 'calendar', meetings: 'calendar',
+  event: 'calendar', events: 'calendar', appointment: 'calendar', appointments: 'calendar',
+  // tasks
+  task: 'task', tasks: 'task', todo: 'task', todos: 'task', reminder: 'task', reminders: 'task',
+  // web
+  internet: 'web', online: 'web', news: 'web', browse: 'web', website: 'web', websites: 'web',
+  // files
+  files: 'file', document: 'file', documents: 'file', doc: 'file', docs: 'file', folder: 'file',
+  folders: 'file', directory: 'file', directories: 'file',
+};
+
+/**
+ * A conservative, dependency-free stemmer: strip the commonest English inflections so
+ * "deploys"/"deployed"/"deploying" unify with "deploy". Order matters; the bare-plural rule is
+ * length-guarded to avoid mangling short words. Best-effort — the SYNONYMS map carries the
+ * load-bearing domain unification; this is a bonus for everything else.
+ */
+export function stem(t: string): string {
+  if (t.length <= 3) return t;
+  if (t.endsWith('ies') && t.length > 4) return t.slice(0, -3) + 'y'; // "policies" → "policy"
+  if (t.endsWith('ing') && t.length > 5) return t.slice(0, -3); // "deploying" → "deploy"
+  if (t.endsWith('ed') && t.length > 4) return t.slice(0, -2); // "deployed" → "deploy"
+  if (t.endsWith('es') && t.length > 4) return t.slice(0, -2); // "boxes" → "box"
+  if (t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1); // "tasks" → "task"
+  return t;
+}
+
+/**
+ * Expand a token set into its retrieval-matching form: each token plus its stem plus any
+ * synonym/alias concept. Applied to BOTH the query and every doc, so vocabulary mismatch no longer
+ * zeroes the overlap. Additive (originals retained) → literal matches are unaffected.
+ */
+export function expand(tokens: Set<string>): Set<string> {
+  const out = new Set<string>();
+  for (const t of tokens) {
+    out.add(t);
+    const s = stem(t);
+    if (s && s !== t) out.add(s);
+    const syn = SYNONYMS[t] ?? SYNONYMS[s];
+    if (syn) out.add(syn);
+  }
+  return out;
+}
+
 /** Authority weight for a path = the value of its LONGEST matching prefix (else 0.5). */
 function authorityFor(relPath: string): number {
   const normalized = relPath.split(path.sep).join('/');
@@ -60,18 +121,23 @@ function authorityFor(relPath: string): number {
 
 /**
  * score(query, doc) = keywordOverlap × recencyMult × authority.
- *   keywordOverlap = |query ∩ docTokens| / |query|
+ *   keywordOverlap = |expand(query) ∩ expand(docTokens)| / |expand(query)|
  *   recencyMult    = max(0.3, 0.5 ** (ageDays / 14))
  *   authority      = weight of the longest matching path prefix (default 0.5)
+ *
+ * Query and doc are both run through `expand` (stem + synonym), so vocabulary mismatch
+ * ("finances" vs "spending") no longer zeroes the overlap. Expansion is additive and symmetric,
+ * so a full literal match still scores exactly as it did before normalization was added.
  */
 export function score(
   query: Set<string>,
   doc: { text: string; path: string; ageDays: number },
 ): number {
-  const docTokens = tokenize(doc.text);
+  const q = expand(query);
+  const docTokens = expand(tokenize(doc.text));
   let hits = 0;
-  for (const t of query) if (docTokens.has(t)) hits++;
-  const keyword = query.size ? hits / query.size : 0;
+  for (const t of q) if (docTokens.has(t)) hits++;
+  const keyword = q.size ? hits / q.size : 0;
   const recency = Math.max(FLOOR, Math.pow(0.5, doc.ageDays / HALF_LIFE));
   const authority = authorityFor(doc.path);
   return keyword * recency * authority;
