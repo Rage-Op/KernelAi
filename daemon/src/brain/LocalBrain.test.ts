@@ -1,38 +1,51 @@
 /**
- * LocalBrain.test.ts — RED until Task 2 creates LocalBrain.ts.
+ * LocalBrain.test.ts — BRAIN-03.
  *
- * Covers BRAIN-03: LocalBrain POSTs Ollama /api/chat (qwen2.5:7b-instruct-q4_K_M) and
- * parses `message.content` → Decision; it is ABSENT-TOLERANT — a rejected fetch
- * (ECONNREFUSED) and a non-ok "model not found" body each return a typed escalation
- * Decision, never throwing across the loop boundary.
+ * LocalBrain POSTs Ollama /api/chat (qwen3.5:9b) and surfaces the model's plain
+ * prose as Decision.reply (NO json-coercion — that made it announce-then-stop). It streams when an
+ * `onToken` callback is passed, and is ABSENT-TOLERANT: a rejected fetch (ECONNREFUSED) and a
+ * non-ok "model not found" body each return a typed escalation Decision, never throwing.
  *
- * `fetch` is mocked by swapping `globalThis.fetch` (LocalBrain uses native fetch). No
- * live Ollama is needed.
+ * `fetch` is mocked by swapping `globalThis.fetch`. No live Ollama is needed.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LocalBrain, OLLAMA_MODEL } from './LocalBrain.js';
+import { LocalBrain, OLLAMA_MODEL, OLLAMA_NUM_CTX, __setToolDispatcherForTest } from './LocalBrain.js';
+import type { ToolCall } from './BrainProvider.js';
 
 const realFetch = globalThis.fetch;
 function restoreFetch(): void {
   globalThis.fetch = realFetch;
 }
 
-test('LocalBrain: a JSON message.content maps to a Decision (model tag is qwen2.5:7b)', async () => {
-  assert.equal(OLLAMA_MODEL, 'qwen2.5:7b-instruct-q4_K_M', 'the model tag is the pinned qwen2.5 7B');
+/** A web ReadableStream that emits each NDJSON line (newline-terminated) — mimics Ollama streaming. */
+function ndjsonStream(lines: string[]): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  let i = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (i < lines.length) {
+        controller.enqueue(enc.encode(lines[i] + '\n'));
+        i += 1;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
 
-  const seen: { body?: unknown } = {};
+test('LocalBrain: plain prose content becomes Decision.reply (no JSON coercion)', async () => {
+  assert.equal(OLLAMA_MODEL, 'qwen3.5:9b', 'the model tag is the pinned qwen3.5 9B');
+
+  const seen: { body?: { model?: string; stream?: boolean; format?: unknown } } = {};
   globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
     seen.body = init?.body ? JSON.parse(init.body) : undefined;
     return {
       ok: true,
       status: 200,
       async json() {
-        return {
-          message: { role: 'assistant', content: JSON.stringify({ thought: 'considered', reply: 'Local says hi.' }) },
-          done: true,
-        };
+        return { message: { role: 'assistant', content: 'Local says hi.' }, done: true };
       },
       async text() {
         return '';
@@ -41,10 +54,108 @@ test('LocalBrain: a JSON message.content maps to a Decision (model tag is qwen2.
   }) as unknown as typeof fetch;
 
   const decision = await new LocalBrain().reason('hello', 'ctx');
-  assert.equal(decision.reply, 'Local says hi.', 'message.content JSON maps to Decision.reply');
-  const body = seen.body as { model?: string };
-  assert.equal(body.model, 'qwen2.5:7b-instruct-q4_K_M', 'POST body names the pinned model');
+  assert.equal(decision.reply, 'Local says hi.', 'plain content maps straight to reply');
+  assert.equal(seen.body?.model, OLLAMA_MODEL, 'POST body names the pinned model');
+  assert.equal(seen.body?.stream, false, 'no onToken → non-streamed request');
+  assert.equal(seen.body?.format, undefined, 'format:json is NOT forced anymore');
 
+  restoreFetch();
+});
+
+test('LocalBrain: replays conversation history between the system message and the current prompt', async () => {
+  const seen: { body?: { messages?: Array<{ role: string; content: string }> } } = {};
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    seen.body = init?.body ? JSON.parse(init.body) : undefined;
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { message: { role: 'assistant', content: 'ok' }, done: true };
+      },
+      async text() {
+        return '';
+      },
+    };
+  }) as unknown as typeof fetch;
+
+  await new LocalBrain().reason('now make it about mountains', 'ctx', undefined, [
+    { role: 'user', content: 'write a haiku about the sea' },
+    { role: 'assistant', content: 'Salt wind on grey swells' },
+  ]);
+
+  const messages = seen.body?.messages ?? [];
+  assert.equal(messages.length, 4, 'system + 2 history turns + current user');
+  assert.equal(messages[0].role, 'system', 'system (memory+persona) stays element 0');
+  assert.equal(messages[1].content, 'write a haiku about the sea', 'history user turn replayed');
+  assert.equal(messages[2].role, 'assistant', 'history assistant turn replayed');
+  assert.equal(messages[3].content, 'now make it about mountains', 'current utterance is LAST');
+
+  restoreFetch();
+});
+
+test('LocalBrain: tool loop — model requests web, the gated dispatcher runs it, model answers from the observation', async () => {
+  let call = 0;
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    call += 1;
+    const body = init?.body ? (JSON.parse(init.body) as { tools?: unknown; messages?: Array<{ role: string }> }) : {};
+    if (call === 1) {
+      assert.ok(Array.isArray(body.tools) && body.tools.length > 0, 'tools advertised to the model');
+      // first hop: the model asks for a web search (no content yet)
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'web', arguments: { op: 'search', query: 'latest mac mini price' } } }] },
+            done: true,
+          };
+        },
+        async text() {
+          return '';
+        },
+      };
+    }
+    // second hop: a role:'tool' observation must precede the answer hop
+    assert.ok((body.messages ?? []).some((m) => m.role === 'tool'), 'observation appended before the answer hop');
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { message: { role: 'assistant', content: 'The latest Mac mini starts at $599.' }, done: true };
+      },
+      async text() {
+        return '';
+      },
+    };
+  }) as unknown as typeof fetch;
+
+  const dispatched: ToolCall[] = [];
+  __setToolDispatcherForTest(async (c: ToolCall) => {
+    dispatched.push(c);
+    return { ok: true, data: { results: [{ title: 'Mac mini', url: 'https://apple.com', snippet: '$599' }] } };
+  });
+
+  const activity: Array<{ tool: string; status: string }> = [];
+  const decision = await new LocalBrain().reason(
+    'what is the latest mac mini price?',
+    'ctx',
+    undefined,
+    undefined,
+    (e) => activity.push({ tool: e.tool, status: e.status }),
+  );
+
+  assert.equal(dispatched.length, 1, 'the web tool was dispatched exactly once');
+  assert.equal(dispatched[0].tool, 'web', 'dispatched the web tool');
+  assert.equal((dispatched[0].args as { op?: string }).op, 'search', 'with op=search');
+  assert.match(decision.reply!, /599/, 'final answer uses the tool observation');
+  assert.equal(call, 2, 'one tool hop + one answer hop');
+  // background tool-use events reported start→ok for the Face's live indicator
+  assert.deepEqual(activity, [
+    { tool: 'web', status: 'start' },
+    { tool: 'web', status: 'ok' },
+  ]);
+
+  __setToolDispatcherForTest(null);
   restoreFetch();
 });
 
@@ -55,13 +166,13 @@ test('LocalBrain: attaches usage (tokens + durations in ms) from Ollama counters
     async json() {
       return {
         model: 'qwen2.5:7b-instruct-q4_K_M',
-        message: { role: 'assistant', content: JSON.stringify({ thought: 't', reply: 'hi' }) },
+        message: { role: 'assistant', content: 'hi' },
         done: true,
         prompt_eval_count: 120,
         eval_count: 40,
-        eval_duration: 2_000_000_000, // 2s in ns → 40 tok / 2s = 20 tok/s downstream
-        load_duration: 500_000_000, // 0.5s in ns
-        total_duration: 2_600_000_000, // 2.6s in ns
+        eval_duration: 2_000_000_000, // 2s in ns → 20 tok/s downstream
+        load_duration: 500_000_000,
+        total_duration: 2_600_000_000,
       };
     },
     async text() {
@@ -77,8 +188,42 @@ test('LocalBrain: attaches usage (tokens + durations in ms) from Ollama counters
   assert.equal(decision.usage!.evalMs, 2000, 'ns → ms');
   assert.equal(decision.usage!.loadMs, 500, 'ns → ms');
   assert.equal(decision.usage!.totalMs, 2600, 'ns → ms');
-  assert.equal(decision.usage!.model, 'qwen2.5:7b-instruct-q4_K_M');
-  assert.equal(decision.usage!.contextWindow, 8192, 'reports the num_ctx window');
+  assert.equal(decision.usage!.contextWindow, OLLAMA_NUM_CTX, 'reports the num_ctx window');
+
+  restoreFetch();
+});
+
+test('LocalBrain: streams content deltas through onToken and concatenates the reply', async () => {
+  const seen: { body?: { stream?: boolean } } = {};
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    seen.body = init?.body ? JSON.parse(init.body) : undefined;
+    return {
+      ok: true,
+      status: 200,
+      body: ndjsonStream([
+        JSON.stringify({ message: { role: 'assistant', content: 'Hello' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', content: ', world' }, done: false }),
+        JSON.stringify({
+          message: { role: 'assistant', content: '' },
+          done: true,
+          model: OLLAMA_MODEL,
+          prompt_eval_count: 10,
+          eval_count: 3,
+          eval_duration: 1_000_000_000,
+        }),
+      ]),
+      async text() {
+        return '';
+      },
+    };
+  }) as unknown as typeof fetch;
+
+  const chunks: string[] = [];
+  const decision = await new LocalBrain().reason('hi', 'ctx', (c) => chunks.push(c));
+  assert.equal(seen.body?.stream, true, 'onToken → streamed request');
+  assert.deepEqual(chunks, ['Hello', ', world'], 'each content delta is surfaced via onToken');
+  assert.equal(decision.reply, 'Hello, world', 'the deltas concatenate into the full reply');
+  assert.equal(decision.usage!.outputTokens, 3, 'usage comes from the final done line');
 
   restoreFetch();
 });
@@ -104,18 +249,17 @@ test('LocalBrain: a non-ok body naming a missing model surfaces an "ollama pull"
       ok: false,
       status: 404,
       async json() {
-        return { error: 'model "qwen2.5:7b-instruct-q4_K_M" not found, try pulling it first' };
+        return { error: 'model not found, try pulling it first' };
       },
       async text() {
-        return 'model "qwen2.5:7b-instruct-q4_K_M" not found, try pulling it first';
+        return 'model "qwen3.5:9b" not found, try pulling it first';
       },
     };
   }) as unknown as typeof fetch;
 
   const decision = await new LocalBrain().reason('hello', 'ctx');
-  assert.match(
-    decision.reply!,
-    /ollama pull qwen2\.5:7b-instruct-q4_K_M/,
+  assert.ok(
+    decision.reply!.includes(`ollama pull ${OLLAMA_MODEL}`),
     'a missing model escalates with the exact pull command',
   );
 

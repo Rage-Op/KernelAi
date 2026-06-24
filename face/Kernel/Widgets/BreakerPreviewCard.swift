@@ -42,16 +42,7 @@ struct BreakerPreviewCard: View {
 
     var body: some View {
         content
-            .padding(Tokens.Space.lg)
-            .frame(maxWidth: 420, alignment: .leading)
-            .background(Tokens.denseMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.widget))
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Radius.widget)
-                    .stroke(Tokens.hairline, lineWidth: 1))
-            .scaleEffect(isPresented ? Motion.bloomEndScale : Motion.bloomStartScale)
-            .opacity(isPresented ? 1 : 0)
-            .blur(radius: isPresented ? 0 : Motion.depthBlurRadius)
-            .animation(isPresented ? Motion.bloom : Motion.dissolve, value: isPresented)
+            .kernelCard(isPresented: isPresented, maxWidth: 420)
             .onAppear { remaining = windowSeconds }
             .onReceive(ticker) { _ in tick() }
     }
@@ -73,10 +64,10 @@ struct BreakerPreviewCard: View {
             HStack(spacing: Tokens.Space.sm) {
                 Text("Red action")
                     .font(Tokens.Typography.label)
-                    .foregroundStyle(Tokens.accentCyan)
+                    .foregroundStyle(Tokens.accentTerracotta)
                     .padding(.horizontal, Tokens.Space.sm)
                     .frame(minHeight: 22)
-                    .overlay(Capsule().stroke(Tokens.accentCyan, lineWidth: 1))
+                    .overlay(Capsule().stroke(Tokens.accentTerracotta, lineWidth: 1))
                 Spacer()
                 countdown
             }
@@ -95,17 +86,26 @@ struct BreakerPreviewCard: View {
         }
     }
 
-    /// The visible 10-second countdown — "Ns to cancel", easing the accent ring as it drains.
+    /// The visible 10-second countdown — a draining terracotta ring around the seconds remaining.
     private var countdown: some View {
-        HStack(spacing: Tokens.Space.xs) {
-            Circle()
-                .fill(Tokens.accentCyan)
-                .frame(width: 8, height: 8)
-                .opacity(remaining > 0 ? 1 : 0.25)
-            Text("\(remaining)s to cancel")
+        HStack(spacing: Tokens.Space.sm) {
+            ZStack {
+                Circle()
+                    .stroke(Tokens.chipFill, lineWidth: 3)
+                Circle()
+                    .trim(from: 0, to: CGFloat(max(0, remaining)) / CGFloat(max(windowSeconds, 1)))
+                    .stroke(Tokens.accentTerracotta, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 1), value: remaining)
+                Text("\(remaining)")
+                    .font(Tokens.Typography.monoEmphasis)
+                    .monospacedDigit()
+                    .foregroundStyle(Tokens.textSecondary)
+            }
+            .frame(width: 34, height: 34)
+            Text("to cancel")
                 .font(Tokens.Typography.label)
                 .foregroundStyle(Tokens.textMuted)
-                .monospacedDigit()
         }
     }
 
@@ -123,7 +123,7 @@ struct BreakerPreviewCard: View {
                 .foregroundStyle(Tokens.canvas)
                 .padding(.horizontal, Tokens.Space.lg)
                 .frame(minHeight: 44)
-                .background(Capsule().fill(Tokens.accentCyan))   // accent-filled CTA
+                .background(Capsule().fill(Tokens.accentTerracotta))   // accent-filled CTA
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Cancel the Red action")

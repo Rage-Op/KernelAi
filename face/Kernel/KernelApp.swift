@@ -22,14 +22,16 @@ struct KernelApp: App {
     @StateObject private var spike = BoundarySpike()
 
     var body: some Scene {
-        // The cloud canvas (CLOUD-02). Full-screen ↔ corner-pill states animate inside.
+        // The designed runtime window: the living sphere stage + titlebar + persistent chrome
+        // (CLOUD-02). Full-screen ↔ corner-pill states animate inside the embedded stage.
         Window("Kernel", id: "cloud") {
-            CloudWindow(coordinator: coordinator)
-                .frame(minWidth: 480, minHeight: 320)
+            RuntimeWindow(coordinator: coordinator)
+                .frame(minWidth: 720, minHeight: 540)
                 .background(Tokens.canvas)
                 .onAppear { coordinator.start() }
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 920, height: 680)
 
         MenuBarExtra("Kernel", systemImage: "circle.dotted") {
             MenuBarContent(coordinator: coordinator, spike: spike)
@@ -43,6 +45,7 @@ struct KernelApp: App {
 struct MenuBarContent: View {
     @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var spike: BoundarySpike
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.md) {
@@ -50,7 +53,7 @@ struct MenuBarContent: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Tokens.accentIndigo, Tokens.accentCyan],
+                            colors: [Tokens.accentTerracotta, Tokens.accentAmber],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing))
                     .frame(width: 10, height: 10)
@@ -60,6 +63,15 @@ struct MenuBarContent: View {
                 Text(connectionLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            Button {
+                openWindow(id: "cloud")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            } label: {
+                Label("Open Kernel", systemImage: "macwindow")
             }
 
             Divider()

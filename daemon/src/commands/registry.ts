@@ -19,11 +19,12 @@
  */
 import { config } from '../config.js';
 import type { BrainProvider } from '../brain/BrainProvider.js';
+import { conversation } from '../memory/conversation.js';
 import { runContextReport } from './context-cmd.js';
 import { runUsageReport } from './usage-cmd.js';
 import { runCompact } from './compact-cmd.js';
 
-export type CommandName = 'context' | 'usage' | 'compact';
+export type CommandName = 'context' | 'usage' | 'compact' | 'clear';
 
 export interface ParsedCommand {
   name: CommandName;
@@ -41,6 +42,9 @@ const ALIASES: Record<string, CommandName> = {
   spend: 'usage',
   compact: 'compact',
   condense: 'compact',
+  clear: 'clear',
+  forget: 'clear',
+  newchat: 'clear',
 };
 
 /**
@@ -66,6 +70,11 @@ const NL_PATTERNS: Record<CommandName, RegExp[]> = {
     /\bcompact\s+(this|it|everything)\b/i,
     /(summari[sz]e|condense|shrink|trim|compress)\s+(?:the\s+|my\s+|our\s+)?(conversation|context|working\s*memory|memory|scratchpad)\b/i,
     /free\s+up\s+(?:some\s+)?(context|memory)\b/i,
+  ],
+  clear: [
+    /(clear|reset|wipe|forget)\s+(?:the\s+|this\s+|our\s+)?(conversation|chat|history)\b/i,
+    /\bstart\s+(?:a\s+)?(?:new|fresh)\s+(conversation|chat)\b/i,
+    /\bforget\s+(?:everything|what\s+we\s+(?:talked|discussed|said))\b/i,
   ],
 };
 
@@ -127,5 +136,14 @@ export async function runCommand(cmd: ParsedCommand, ctx: CommandContext): Promi
       return runUsageReport(cmd.arg);
     case 'compact':
       return runCompact(cmd.arg, memoryDir, ctx.brain);
+    case 'clear': {
+      // Empty the SHORT-TERM conversation buffer (start a fresh dialogue). Long-term memory in
+      // kernel-memory (IDENTITY, current.md, knowledge) is untouched — that's `/compact`'s domain.
+      const n = conversation.size();
+      conversation.clear();
+      return n > 0
+        ? `Cleared the conversation — ${n} turn${n === 1 ? '' : 's'} forgotten. Long-term memory is untouched.`
+        : 'Conversation already empty — nothing to clear.';
+    }
   }
 }

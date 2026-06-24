@@ -42,16 +42,7 @@ struct AccountsWidget: View {
 
     var body: some View {
         content
-            .padding(Tokens.Space.lg)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(Tokens.widgetMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.widget))
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Radius.widget)
-                    .stroke(Tokens.hairline, lineWidth: 1))
-            .scaleEffect(isPresented ? Motion.bloomEndScale : Motion.bloomStartScale)
-            .opacity(isPresented ? 1 : 0)
-            .blur(radius: isPresented ? 0 : Motion.depthBlurRadius)
-            .animation(isPresented ? Motion.bloom : Motion.dissolve, value: isPresented)
+            .kernelCard(isPresented: isPresented, maxWidth: 360)
     }
 
     @ViewBuilder
@@ -71,6 +62,7 @@ struct AccountsWidget: View {
 
     private var populated: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.md) {
+            CardHeader(dot: Tokens.accentAmber, title: "Balances")
             ForEach(payload.accounts) { account in
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: Tokens.Space.xs) {

@@ -225,6 +225,55 @@ export const BreakerCancelSchema = z.object({
 });
 
 /**
+ * ADDITIVE arm (daemon→Face): a streamed output delta for a snappy, real-time reply. While the
+ * brain generates, each chunk is sent as `say{delta}` (append to the in-progress line + speak the
+ * newly-completed sentences); the terminal `say{final:true, delta:''}` closes the line. A streamed
+ * turn sends `say` frames INSTEAD of a single `reply` (the loop's reply is replaced by the stream).
+ * Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const SaySchema = z.object({
+  type: z.literal('say'),
+  id: z.string(),
+  /** One output delta to append to the in-progress reply (empty string on the final frame). */
+  delta: z.string(),
+  /** True on the terminal frame — the reply is complete (finalize the line, flush any TTS). */
+  final: z.boolean(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): a widget-displayer COMMAND. KERNEL (or a tool) emits a single
+ * command-language string and the Face's displayer parses it, slides in from the right (the sphere
+ * minimizes left), and renders the right card with the right options + interactivity. Grammar:
+ *   `<verb> <kind> key:value key:value … options:opt,opt(auto Ns)`
+ * e.g. `focus email to:john@x.com from:Acme subject:Renewal content:… options:abort,send(auto 15s)`.
+ * The Face never acts on an option locally — tapping one emits a `ui.intent` the daemon dispatches
+ * through the gate (so send/abort stay gate-chokepointed). Appended to the frozen union.
+ */
+export const WidgetCommandSchema = z.object({
+  type: z.literal('widget.command'),
+  id: z.string(),
+  command: z.string(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): BACKGROUND TOOL ACTIVITY. As the local brain's tool loop runs, the
+ * daemon emits one of these per tool call so the Face can show what KERNEL is doing ("🔧 web ·
+ * searching…", then "✓ web") instead of an opaque pause. Purely informational — it drives no action.
+ *   - status 'start' → the tool was dispatched (show a working indicator)
+ *   - status 'ok'    → it returned (brief confirm, then fade)
+ *   - status 'error' → it escalated/failed (brief notice)
+ * `detail` is a short, non-sensitive label (e.g. the search query or "balances") — never raw results.
+ */
+export const ToolActivitySchema = z.object({
+  type: z.literal('tool.activity'),
+  id: z.string(),
+  tool: z.string(),
+  op: z.string(),
+  status: z.enum(['start', 'ok', 'error']),
+  detail: z.string().optional(),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
  * plus the designed-for P2/P3/P4/P5 shapes. `safeParse` every incoming line against this.
  */
@@ -249,6 +298,9 @@ export const FrameSchema = z.discriminatedUnion('type', [
   BreakerPreviewSchema, // P5 additive (daemon→Face Red dry-run preview)
   CapabilitiesSchema, // additive (daemon→Face runtime capabilities on connect)
   StatsSchema, // additive (daemon→Face per-turn token/timing/cost telemetry)
+  SaySchema, // additive (daemon→Face streamed reply deltas for real-time render + TTS)
+  WidgetCommandSchema, // additive (daemon→Face widget-displayer command-language string)
+  ToolActivitySchema, // additive (daemon→Face background tool-use activity for live visibility)
 ]);
 
 /** Any valid frame. */
@@ -273,6 +325,9 @@ export type BreakerPreview = z.infer<typeof BreakerPreviewSchema>;
 export type BreakerCancel = z.infer<typeof BreakerCancelSchema>;
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 export type Stats = z.infer<typeof StatsSchema>;
+export type Say = z.infer<typeof SaySchema>;
+export type WidgetCommand = z.infer<typeof WidgetCommandSchema>;
+export type ToolActivity = z.infer<typeof ToolActivitySchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

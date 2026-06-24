@@ -38,6 +38,10 @@ async function ask(system: string, user: string): Promise<string | null> {
           { role: 'user', content: user },
         ],
         stream: false,
+        // The helper is a FAST classifier — thinking must be OFF. qwen3.5 is thinking-capable and
+        // would otherwise emit slow <think> chains that both delay the answer AND wrap the expected
+        // JSON/label (breaking the parse). think:false keeps it a crisp one-shot tag.
+        think: false,
         options: { temperature: 0.1, num_ctx: 4096 },
         // keep_alive OMITTED — never -1 (16GB idle-unload).
       }),

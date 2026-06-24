@@ -48,17 +48,7 @@ struct EventsWidget: View {
 
     var body: some View {
         content
-            .padding(Tokens.Space.lg)                       // 24px (lg) glass interior padding
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(Tokens.widgetMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.widget))
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Radius.widget)
-                    .stroke(Tokens.hairline, lineWidth: 1))    // white-7% hairline border
-            // Bloom / dissolve: scale + opacity + forward-blur (no snap).
-            .scaleEffect(isPresented ? Motion.bloomEndScale : Motion.bloomStartScale)
-            .opacity(isPresented ? 1 : 0)
-            .blur(radius: isPresented ? 0 : Motion.depthBlurRadius)
-            .animation(isPresented ? Motion.bloom : Motion.dissolve, value: isPresented)
+            .kernelCard(isPresented: isPresented, maxWidth: 360)
             .onChange(of: isPresented) { _, presented in
                 if presented { startCountUp() } else { displayedCount = 0 }
             }
@@ -80,32 +70,50 @@ struct EventsWidget: View {
 
     private var populated: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.md) {
-            // Count headline — Display 28/600, TABULAR, counts up.
-            Text("\(displayedCount) \(displayedCount == 1 ? "event" : "events")")
-                .font(Tokens.Typography.display)
-                .monospacedDigit()                       // tabular numerals (Dimension 4)
-                .foregroundStyle(Tokens.textPrimary)
+            // "Today" header — violet marker + a tabular count on the trailing edge.
+            CardHeader(dot: Tokens.catViolet, title: "Today") {
+                Text("\(displayedCount) \(displayedCount == 1 ? "event" : "events")")
+                    .font(Tokens.Typography.monoLabel)
+                    .monospacedDigit()
+                    .foregroundStyle(Tokens.textMuted)
+            }
 
-            VStack(alignment: .leading, spacing: Tokens.Space.sm) {  // 8px (sm) row gap
-                ForEach(payload.items) { item in
-                    HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.sm) {
-                        Text(item.time)
-                            .font(Tokens.Typography.label)
-                            .monospacedDigit()           // times align (tabular)
-                            .foregroundStyle(Tokens.textMuted)
-                            .frame(minWidth: 56, alignment: .leading)
-                        VStack(alignment: .leading, spacing: Tokens.Space.xs) {
-                            Text(item.title)
-                                .font(Tokens.Typography.body)
-                                .foregroundStyle(Tokens.textPrimary)
-                            if let location = item.location, !location.isEmpty {
-                                Text(location)
-                                    .font(Tokens.Typography.label)
-                                    .foregroundStyle(Tokens.textMuted)
-                            }
-                        }
-                    }
+            VStack(spacing: Tokens.Space.xs) {
+                ForEach(Array(payload.items.enumerated()), id: \.element.id) { idx, item in
+                    timelineRow(item, isNext: idx == 0)
                 }
+            }
+        }
+    }
+
+    /// One timeline row: a tabular time on a left rail + the title/location, with the next event
+    /// (the first) highlighted by a terracotta edge bar + warm well.
+    private func timelineRow(_ item: EventItem, isNext: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.md) {
+            Text(item.time)
+                .font(Tokens.Typography.monoLabel)
+                .monospacedDigit()
+                .foregroundStyle(Tokens.textMuted)
+                .frame(width: 52, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                    .font(Tokens.Typography.body)
+                    .foregroundStyle(Tokens.textPrimary)
+                if let location = item.location, !location.isEmpty {
+                    Text(location)
+                        .font(Tokens.Typography.label)
+                        .foregroundStyle(Tokens.textMuted)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, Tokens.Space.sm)
+        .background(isNext ? Tokens.chipFill : .clear,
+                    in: RoundedRectangle(cornerRadius: Tokens.Radius.chip, style: .continuous))
+        .overlay(alignment: .leading) {
+            if isNext {
+                Capsule().fill(Tokens.accentTerracotta).frame(width: 2).padding(.vertical, 4)
             }
         }
     }

@@ -13,7 +13,7 @@ import { listTools } from './registry.js';
 
 test('registerBuiltinTools registers the built-in hands and listTools reports them', async () => {
   const returned = await registerBuiltinTools();
-  for (const name of ['browser', 'finance', 'mail', 'peekaboo']) {
+  for (const name of ['browser', 'finance', 'mail', 'peekaboo', 'web']) {
     assert.ok(returned.includes(name), `registerBuiltinTools result includes ${name}`);
     assert.ok(listTools().includes(name), `listTools() includes ${name}`);
   }

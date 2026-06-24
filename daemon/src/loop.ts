@@ -20,6 +20,7 @@ import type { BrainProvider, ToolCall, BrainUsage } from './brain/BrainProvider.
 import type { Provenance } from './memory/types.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { inject } from './memory/inject.js';
+import { conversation } from './memory/conversation.js';
 import { logSession } from './memory/log.js';
 import { dispatch } from './tools/registry.js';
 import { overrideSingleton } from './safety/override.js';
@@ -37,6 +38,12 @@ export interface Intent {
   reply?: (text: string) => void;
   /** Surface per-pass telemetry (tokens/timing/model) — the server turns it into a `stats` frame. */
   onUsage?: (usage: BrainUsage) => void;
+  /** Stream each output delta as the brain generates — the server turns it into `say` frames so the
+   *  reply renders + speaks in real time. Absent for non-streaming originators/brains. */
+  onToken?: (delta: string) => void;
+  /** Report background tool use (start/ok/error) as the brain's tool loop runs — the server turns it
+   *  into `tool.activity` frames so the Face can show what KERNEL is doing live. */
+  onToolActivity?: (event: import('./brain/BrainProvider.js').ToolActivityEvent) => void;
   /** Memory dir override (tests run against a temp dir; defaults to config.memoryDir). */
   memoryDir?: string;
 }
@@ -166,8 +173,19 @@ export function drain(): Promise<void> {
 
         // recall: assemble IDENTITY-first context under the 16K cap.
         const context = await inject(promptFor(intent), intent.memoryDir);
-        // decide: route even the stub through reason() so the seam is real.
-        const decision = await brain.reason(promptFor(intent), context);
+        // SHORT-TERM MEMORY: replay the recent dialogue so the brain can FOLLOW UP across consecutive
+        // prompts (the multi-turn fix). Only user-sourced turns are ever buffered (provenance), and a
+        // schedule/tool wake gets no history — it isn't part of the owner's conversation.
+        const history = intent.source === 'user' ? conversation.history() : [];
+        // decide: route even the stub through reason() so the seam is real. `onToken` (when the
+        // originator supplied one and the brain streams) surfaces deltas live for a snappy reply.
+        const decision = await brain.reason(
+          promptFor(intent),
+          context,
+          intent.onToken,
+          history,
+          intent.onToolActivity,
+        );
         // act: dispatch a real decision.action through the router. The loop NEVER imports the
         // gate or a tool directly — dispatch() runs gate.authorize internally, preserving the
         // single-chokepoint invariant. A blocked/escalated result is surfaced like a reply.
@@ -192,6 +210,13 @@ export function drain(): Promise<void> {
         logSession({ intent, decision }, intent.memoryDir);
         // surface the reply to the originator (the IPC server pushes a reply frame).
         if (decision.reply && intent.reply) intent.reply(decision.reply);
+        // SHORT-TERM MEMORY: record this exchange so the NEXT turn remembers it. Guarded to
+        // source:'user' (defense-in-depth — external/tool content is DATA, never dialogue) and to a
+        // non-empty reply (a pure tool dispatch with no prose is not a conversational turn).
+        if (intent.source === 'user' && decision.reply) {
+          conversation.recordUser(promptFor(intent));
+          conversation.recordAssistant(decision.reply);
+        }
         // surface per-pass telemetry AFTER the reply (the server pushes a stats frame; the client
         // renders it under the answer). Absent when the brain reported no usage (e.g. the stub).
         if (decision.usage && intent.onUsage) intent.onUsage(decision.usage);

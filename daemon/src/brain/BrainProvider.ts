@@ -45,6 +45,27 @@ export interface BrainUsage {
   contextWindow?: number;
 }
 
+/**
+ * One prior conversation turn replayed to the model so it remembers the dialogue across consecutive
+ * utterances (the short-term memory that was missing — every turn used to be a stateless single-shot).
+ * Only `source:'user'` exchanges ever become turns (provenance discipline: external/tool content is
+ * DATA in the injected context, never a conversational turn).
+ */
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/** A background tool-use event a brain MAY report as its tool loop runs, so a client can show what
+ *  KERNEL is doing live (the daemon turns it into a `tool.activity` frame). `detail` is a short,
+ *  non-sensitive label (a query or op), NEVER raw results. */
+export interface ToolActivityEvent {
+  tool: string;
+  op: string;
+  status: 'start' | 'ok' | 'error';
+  detail?: string;
+}
+
 /** The structured output of a single reasoning pass. */
 export interface Decision {
   /** The brain's reasoning (logged, not spoken). */
@@ -74,9 +95,30 @@ export interface BrainContext {
 
 /**
  * The brain interface. Spec-literal signature: reason(prompt, context: string).
+ *
+ * `onToken` (ADDITIVE, optional) lets a streaming brain surface output incrementally as it
+ * generates — the loop forwards each chunk to the client so the reply renders + speaks in real
+ * time instead of appearing all at once. Implementations that don't stream simply ignore it (a
+ * 2-arg `reason` still satisfies this interface), and a caller that doesn't care about streaming
+ * omits it.
+ *
+ * `history` (ADDITIVE, optional) is the rolling conversation buffer — the recent prior turns the
+ * brain replays so it can follow up across consecutive prompts ("now make it about mountains"). The
+ * assembled `context` (IDENTITY + memory) stays the SYSTEM message; `history` is the dialogue turns
+ * that precede the current `prompt`. A brain that ignores it (or a 2/3-arg caller) still conforms.
+ *
+ * `onToolActivity` (ADDITIVE, optional) lets a tool-using brain report each background tool call as
+ * it happens (start/ok/error) so the loop can surface it to the client. Brains that don't use tools
+ * (or callers that don't care) omit it.
  */
 export interface BrainProvider {
-  reason(prompt: string, context: string): Promise<Decision>;
+  reason(
+    prompt: string,
+    context: string,
+    onToken?: (chunk: string) => void,
+    history?: ChatTurn[],
+    onToolActivity?: (event: ToolActivityEvent) => void,
+  ): Promise<Decision>;
 }
 
 /**

@@ -18,14 +18,21 @@ struct CloudUniforms {
     var burst: Float = 0
     var dt: Float = 0
     var center: SIMD2<Float> = .zero
+    /// Resonance mode: 0 idle · 1 listening · 2 thinking · 3 speaking (CloudMode.rawValue).
+    var mode: Float = 0
+    /// 1 when "Reduce Motion" is on — the shader gentles rotation/breath/turbulence (keeps the glow).
+    var reduceMotion: Float = 0
 }
 
+/// MUST match `Particle` in Particles.metal exactly (float3 first keeps the 16-byte alignment
+/// identical across Swift SIMD3 and Metal float3).
 private struct Particle {
-    var position: SIMD2<Float>
+    var home: SIMD3<Float>      // fixed point on the unit sphere
+    var position: SIMD2<Float>  // current 2-D render position
     var velocity: SIMD2<Float>
-    var home: SIMD2<Float>
     var seed: Float
     var brightness: Float
+    var depth: Float
 }
 
 /// Shared, observable amplitude/scene source the MicEngine writes and the cloud reads.
@@ -33,12 +40,19 @@ private struct Particle {
 /// daemon (CLOUD-03) — MicEngine sets `amplitude` directly, the renderer samples it.
 @MainActor
 final class CloudState: ObservableObject {
+    /// The sphere's resonance state — the "complex resonance" with both faces.
+    /// idle = slow breath · listening = contracts + shimmers to your voice · thinking = internal
+    /// swirl · speaking = radiates outward with KERNEL's speech.
+    enum CloudMode: Int { case idle, listening, thinking, speaking }
+
     /// Smoothed Face-local mic RMS, 0..1. Written by MicEngine, read each frame.
     @Published var amplitude: Float = 0
     /// Transient boundary-burst impulse (set by the Stage on a cue, decays in-renderer).
     @Published var burst: Float = 0
     /// Cloud center in NDC; shifts when the scene migrates to the corner pill.
     @Published var center: SIMD2<Float> = .zero
+    /// The active resonance mode, set by the coordinator from inbound frames + mic state.
+    @Published var mode: CloudMode = .idle
 
     /// Fire a localized brighten/burst flash (TTS boundary crossing — UI-SPEC).
     func pulse() { burst = 1.0 }
@@ -49,6 +63,8 @@ struct CloudCanvas: NSViewRepresentable {
     @ObservedObject var state: CloudState
     /// Pass a smaller count for the corner-pill miniature cloud.
     var particleCount: Int = ParticleRenderer.defaultCount
+    /// Respect the system "Reduce Motion" accessibility setting — the sphere gentles its motion.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeCoordinator() -> ParticleRenderer {
         ParticleRenderer(state: state, particleCount: particleCount)
@@ -58,7 +74,8 @@ struct CloudCanvas: NSViewRepresentable {
         let view = MTKView()
         view.device = context.coordinator.device
         view.colorPixelFormat = .bgra8Unorm
-        view.clearColor = MTLClearColor(red: 0x08 / 255, green: 0x08 / 255, blue: 0x0A / 255, alpha: 1)
+        // Warm near-black canvas (#0A0908) — the "Personal Agent Runtime" base.
+        view.clearColor = MTLClearColor(red: 0x0A / 255, green: 0x09 / 255, blue: 0x08 / 255, alpha: 1)
         view.framebufferOnly = true
         view.preferredFramesPerSecond = 60
         view.delegate = context.coordinator
@@ -69,6 +86,7 @@ struct CloudCanvas: NSViewRepresentable {
 
     func updateNSView(_ nsView: MTKView, context: Context) {
         context.coordinator.particleCount = particleCount
+        context.coordinator.reduceMotion = reduceMotion
     }
 }
 
@@ -76,7 +94,11 @@ struct CloudCanvas: NSViewRepresentable {
 @MainActor
 final class ParticleRenderer: NSObject, MTKViewDelegate {
 
-    static let defaultCount = 24_000        // holds 60fps on Apple-silicon iGPU
+    // FEWER, BETTER-SHADED particles (WS-E): ~6k individually depth/fresnel-shaded points read as a
+    // premium, alive orb where 40k flat dots read as noise. Cheaper too (lower fill-rate).
+    // ~22k: enough additive DENSITY to read as a luminous orb, while still better-shaded + fewer
+    // than the old 40k flat cloud (additive glow ∝ count × sprite-area × brightness). 60fps on M2 Pro.
+    static let defaultCount = 22_000
     static let minCount = 6_000             // floor when shedding under pressure
 
     let device: MTLDevice
@@ -90,6 +112,8 @@ final class ParticleRenderer: NSObject, MTKViewDelegate {
     var particleCount: Int {
         didSet { if particleCount != oldValue { rebuildParticles() } }
     }
+    /// Mirrors the system "Reduce Motion" setting; folded into the uniforms each frame.
+    var reduceMotion = false
 
     private var uniforms = CloudUniforms()
     private var startTime = CFAbsoluteTimeGetCurrent()
@@ -132,17 +156,33 @@ final class ParticleRenderer: NSObject, MTKViewDelegate {
     private func rebuildParticles() {
         var particles: [Particle] = []
         particles.reserveCapacity(particleCount)
-        for _ in 0..<particleCount {
-            // Seed a soft gaussian-ish disk around the center.
-            let r = Float.random(in: 0...1).squareRoot() * 0.7
-            let theta = Float.random(in: 0...(2 * .pi))
-            let home = SIMD2<Float>(cos(theta) * r, sin(theta) * r)
+        // Fibonacci sphere: an even, organic distribution of points over the unit sphere — the
+        // structure that makes the cloud read as a dimensional orb rather than a flat disk.
+        let golden = Float.pi * (3.0 - (5.0 as Float).squareRoot())   // golden angle
+        let n = Float(max(particleCount, 1))
+        for i in 0..<particleCount {
+            let fi = Float(i)
+            let y = 1.0 - (fi / max(n - 1, 1)) * 2.0                   // y: +1 → -1
+            let rad = (max(0, 1.0 - y * y)).squareRoot()              // ring radius at y
+            let phi = fi * golden
+            // SHELL: most particles cluster near the surface (0.90–1.0) so the silhouette is crisp for
+            // the fresnel rim; ~12% sit deep inside (0.45–0.70) forming a bright volumetric CORE so the
+            // orb reads as a sphere with a heart, not a hollow shell. `length(home)` tells the shader
+            // which is which (core particles glow warm/bright at center).
+            let isCore = (i % 8 == 0)
+            let shell = isCore ? (0.45 + 0.25 * Float.random(in: 0...1))
+                               : (0.90 + 0.10 * Float.random(in: 0...1))
+            let home = SIMD3<Float>(cos(phi) * rad, y, sin(phi) * rad) * shell
+            // Seed near the projected position so the first frame doesn't ease in from the origin.
+            // Smaller base radius (0.46) — a compact, energy-dense orb; the glow does the visual work.
+            let pos = SIMD2<Float>(home.x, home.y) * 0.46
             particles.append(Particle(
-                position: home,
-                velocity: .zero,
                 home: home,
+                position: pos,
+                velocity: .zero,
                 seed: Float.random(in: 0...1),
-                brightness: Float.random(in: 0.2...0.5)))
+                brightness: Float.random(in: 0.35...0.65),
+                depth: home.z))
         }
         particleBuffer = device.makeBuffer(
             bytes: particles,
@@ -170,6 +210,8 @@ final class ParticleRenderer: NSObject, MTKViewDelegate {
         uniforms.amplitude = state.amplitude
         uniforms.burst = state.burst
         uniforms.center = state.center
+        uniforms.mode = Float(state.mode.rawValue)   // resonance mode → shader
+        uniforms.reduceMotion = reduceMotion ? 1 : 0 // accessibility: gentle the motion
         state.burst *= 0.85               // ease the burst back down (Motion Law: no snap)
         if state.burst < 0.01 { state.burst = 0 }
 

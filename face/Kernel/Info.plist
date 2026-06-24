@@ -24,5 +24,7 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>KERNEL listens for your voice so you can talk to it directly.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>KERNEL transcribes your held-to-talk speech on-device so you can speak instead of type.</string>
 </dict>
 </plist>

@@ -27,10 +27,29 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     @Published private(set) var isSpeaking = false
 
+    /// Outstanding queued chunks in the streaming-TTS path (see `enqueueChunk`). While > 0 the
+    /// speaker stays "speaking" across per-sentence utterances; the legacy single-utterance `speak`
+    /// path leaves this at 0 and uses the original didFinish behavior.
+    private var pendingChunks = 0
+
     init(stage: StageController) {
         self.stage = stage
         super.init()
         synth.delegate = self
+    }
+
+    /// Streaming TTS: speak one sentence chunk immediately, queued behind any already speaking. The
+    /// synth plays queued utterances back-to-back, so calling this as each sentence completes makes
+    /// KERNEL start talking almost as soon as it starts generating (snappy), not after the full reply.
+    func enqueueChunk(_ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        let utterance = AVSpeechUtterance(string: t)
+        utterance.voice = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        pendingChunks += 1
+        isSpeaking = true
+        synth.speak(utterance)
     }
 
     /// Speak a reply and choreograph its cues. Loads the cues into the Stage,
@@ -55,6 +74,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     func stop() {
         synth.stopSpeaking(at: .immediate)
         stage.reset()
+        pendingChunks = 0
         isSpeaking = false
     }
 
@@ -83,11 +103,19 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        // Streaming path: stay "speaking" until the last queued chunk finishes (no cue choreography).
+        if pendingChunks > 0 {
+            pendingChunks -= 1
+            if pendingChunks == 0 { isSpeaking = false }
+            return
+        }
+        // Legacy single-utterance path: finish + dissolve the last widget back into the cloud.
         isSpeaking = false
-        stage.fireOnFinish()      // dissolve the last widget back into the cloud
+        stage.fireOnFinish()
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        pendingChunks = 0
         isSpeaking = false
     }
 }

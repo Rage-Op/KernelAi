@@ -30,6 +30,23 @@ test('protocol: an unknown type is rejected', () => {
   assert.equal(r.success, false);
 });
 
+test('protocol: tool.activity frame round-trips (additive, daemon→Face background tool use)', () => {
+  assert.equal(
+    FrameSchema.safeParse({ type: 'tool.activity', id: 'a1', tool: 'web', op: 'search', status: 'start', detail: 'apple news' }).success,
+    true,
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'tool.activity', id: 'a1', tool: 'finance', op: 'aggregate', status: 'ok' }).success,
+    true,
+    'detail is optional',
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'tool.activity', id: 'a1', tool: 'web', op: 'search', status: 'bogus' }).success,
+    false,
+    'status is constrained to start|ok|error',
+  );
+});
+
 test('protocol: a missing required field is rejected', () => {
   // utterance without `text`
   assert.equal(FrameSchema.safeParse({ type: 'utterance', id: 'a1', final: true }).success, false);

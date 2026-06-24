@@ -20,6 +20,7 @@ const BUILTIN_TOOL_MODULES = [
   './mail.js',
   './peekaboo.js',
   './finance.js',
+  './web.js',
 ] as const;
 
 /** Import every built-in tool module so it self-registers. Idempotent; safe to call once at boot. */

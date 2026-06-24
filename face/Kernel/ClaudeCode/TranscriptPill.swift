@@ -55,7 +55,7 @@ struct TranscriptPill: View {
         HStack(spacing: Tokens.Space.sm) {
             // Accent live-pulse dot (UI-SPEC accent reserved use #5) — pulses while streaming.
             Circle()
-                .fill(Tokens.accentCyan)
+                .fill(Tokens.accentTerracotta)
                 .frame(width: 8, height: 8)
                 .opacity(isStreaming ? (pulse ? 1.0 : 0.4) : 0.25)
                 .animation(
@@ -113,7 +113,7 @@ struct TranscriptPill: View {
         HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.xs) {
             Text(line.role == .kernel ? "› " : "· ")
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(line.role == .kernel ? Tokens.accentIndigo : Tokens.textMuted)
+                .foregroundStyle(line.role == .kernel ? Tokens.accentTerracotta : Tokens.textMuted)
             Text(line.text)
                 .font(.system(size: 13, weight: .regular, design: .monospaced))
                 .foregroundStyle(line.role == .kernel ? Tokens.textPrimary : Tokens.textMuted)

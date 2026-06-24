@@ -37,6 +37,8 @@ targets:
         # Declared from the FIRST build so the TCC identity is stable even
         # though the boundary spike itself does not need the mic (Pitfall 4).
         NSMicrophoneUsageDescription: "KERNEL listens for your voice so you can talk to it directly."
+        # Push-to-talk uses Apple's on-device speech recognition (no audio leaves the machine).
+        NSSpeechRecognitionUsageDescription: "KERNEL transcribes your held-to-talk speech on-device so you can speak instead of type."
     settings:
       base:
         CODE_SIGN_ENTITLEMENTS: Kernel/Kernel.entitlements
@@ -56,6 +58,11 @@ targets:
       base:
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Kernel.app/Contents/MacOS/Kernel"
+        # The unit-test bundle has no checked-in Info.plist; let Xcode synthesize one so the
+        # bundle can be signed and the test host can load it (otherwise `xcodebuild test` fails
+        # at the code-sign step before any test runs).
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.kernel.faceTests
 
 schemes:
   Kernel:

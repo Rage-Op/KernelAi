@@ -16,7 +16,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 
-import type { BrainProvider, Decision } from './BrainProvider.js';
+import type { BrainProvider, ChatTurn, Decision } from './BrainProvider.js';
 
 /** The default model (BRAIN-02). Kept a named constant so it is configurable, not buried (A1). */
 export const CLAUDE_MODEL = 'claude-opus-4-8';
@@ -74,12 +74,18 @@ function textOf(msg: ClaudeMessage): string {
 }
 
 export class ClaudeBrain implements BrainProvider {
-  async reason(prompt: string, context: string): Promise<Decision> {
+  async reason(
+    prompt: string,
+    context: string,
+    _onToken?: (chunk: string) => void,
+    history?: ChatTurn[],
+  ): Promise<Decision> {
     const msg = await getClient().messages.create({
       model: CLAUDE_MODEL,
       max_tokens: MAX_TOKENS,
-      system: context, // IDENTITY + memory the loop's inject() assembled
-      messages: [{ role: 'user', content: prompt }],
+      system: context, // IDENTITY + memory the loop's inject() assembled (stays the system prompt)
+      // prior dialogue turns precede the current utterance so Claude can follow up across prompts.
+      messages: [...(history ?? []), { role: 'user', content: prompt }],
     });
 
     // MANUAL tool loop (BRAIN-06): a tool_use turn returns ONE action; the loop gates+runs it.

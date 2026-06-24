@@ -94,6 +94,9 @@ enum Frame: Codable, Equatable {
     /// P5 additive (SAFE-03): the owner cancelled a Red action within the 10s window. Mirrors
     /// BreakerCancelSchema. `id` correlates to the breaker.preview the daemon broadcast.
     case breakerCancel(id: String)
+    /// P5 additive (SAFE-02): `/override` activation from the Face. Mirrors OverrideSchema.
+    /// `active:true` scopes Green/Yellow autonomy for `ttlMs`; NEVER unlocks Red.
+    case override(active: Bool, ttlMs: Int?)
     // daemon → Face
     case ready(daemon: String, version: String)
     case reply(id: String, text: String)
@@ -108,6 +111,30 @@ enum Frame: Codable, Equatable {
     /// 10s cancel window. Mirrors BreakerPreviewSchema. `estimatedSpend` is SHOWN to the owner but
     /// NEVER written to the audit log (V7); `tier` is always `red`.
     case breakerPreview(id: String, summary: String, estimatedSpend: Double, tier: BreakerTier)
+    /// ADDITIVE (daemon→Face): the daemon's runtime capabilities, pushed once on connect right
+    /// after `ready`. Mirrors CapabilitiesSchema. Powers the boot/runtime-status screen and the
+    /// telemetry strip's static fields (model, context cap, tool/integration counts).
+    case capabilities(
+        brain: Brain, daemon: String, version: String,
+        injectCap: Int, tools: [String], integrations: [String])
+    /// ADDITIVE (daemon→Face): per-turn telemetry correlated by `id`. Mirrors StatsSchema. All
+    /// metric fields optional — a brain that doesn't measure sends only id/brain. Powers the
+    /// always-on telemetry strip (tok/s, tokens, context fill, est cost).
+    case stats(
+        id: String, brain: Brain, model: String?,
+        promptTokens: Int?, outputTokens: Int?, tokensPerSec: Double?,
+        evalMs: Double?, loadMs: Double?, totalMs: Double?,
+        contextWindow: Int?, estCostUsd: Double?)
+    /// ADDITIVE (daemon→Face): one streamed reply delta for a real-time render + TTS. Each `say`
+    /// appends `delta` to the in-progress reply; `final:true` (with empty delta) closes it. A
+    /// streamed turn sends `say` frames INSTEAD of a single `reply`. Mirrors SaySchema.
+    case say(id: String, delta: String, final: Bool)
+    /// ADDITIVE (daemon→Face): a widget-displayer command-language string the Face parses + renders
+    /// in the slide-in panel. Mirrors WidgetCommandSchema.
+    case widgetCommand(id: String, command: String)
+    /// ADDITIVE (daemon→Face): background tool-use activity so the Face can show what KERNEL is
+    /// doing live ("🔧 web · searching…", then a brief ✓). Mirrors ToolActivitySchema. Informational.
+    case toolActivity(id: String, tool: String, op: String, status: String, detail: String?)
 
     /// The Settings brain toggle enum (mirrors SettingsSchema.brain).
     enum Brain: String, Codable { case cloud, local }
@@ -125,6 +152,13 @@ enum Frame: Codable, Equatable {
         case type, client, version, id, text, final, intent, payload, brain
         case daemon, cues, onFinish, widget, data, state, message, role, partial
         case summary, estimatedSpend, tier
+        // Additive arms: override (Face→daemon), capabilities + stats (daemon→Face).
+        case active, ttlMs
+        case injectCap, tools, integrations
+        case model, promptTokens, outputTokens, tokensPerSec, evalMs, loadMs, totalMs, contextWindow, estCostUsd
+        case delta
+        case command
+        case tool, op, status, detail
     }
 
     // MARK: Decode (narrow by `type`, exactly like the zod discriminated union)
@@ -153,6 +187,47 @@ enum Frame: Codable, Equatable {
             self = .settings(brain: try c.decode(Brain.self, forKey: .brain))
         case "breaker.cancel":
             self = .breakerCancel(id: try c.decode(String.self, forKey: .id))
+        case "override":
+            self = .override(
+                active: try c.decode(Bool.self, forKey: .active),
+                ttlMs: try c.decodeIfPresent(Int.self, forKey: .ttlMs))
+        case "capabilities":
+            self = .capabilities(
+                brain: try c.decode(Brain.self, forKey: .brain),
+                daemon: try c.decode(String.self, forKey: .daemon),
+                version: try c.decode(String.self, forKey: .version),
+                injectCap: try c.decode(Int.self, forKey: .injectCap),
+                tools: try c.decode([String].self, forKey: .tools),
+                integrations: try c.decode([String].self, forKey: .integrations))
+        case "stats":
+            self = .stats(
+                id: try c.decode(String.self, forKey: .id),
+                brain: try c.decode(Brain.self, forKey: .brain),
+                model: try c.decodeIfPresent(String.self, forKey: .model),
+                promptTokens: try c.decodeIfPresent(Int.self, forKey: .promptTokens),
+                outputTokens: try c.decodeIfPresent(Int.self, forKey: .outputTokens),
+                tokensPerSec: try c.decodeIfPresent(Double.self, forKey: .tokensPerSec),
+                evalMs: try c.decodeIfPresent(Double.self, forKey: .evalMs),
+                loadMs: try c.decodeIfPresent(Double.self, forKey: .loadMs),
+                totalMs: try c.decodeIfPresent(Double.self, forKey: .totalMs),
+                contextWindow: try c.decodeIfPresent(Int.self, forKey: .contextWindow),
+                estCostUsd: try c.decodeIfPresent(Double.self, forKey: .estCostUsd))
+        case "say":
+            self = .say(
+                id: try c.decode(String.self, forKey: .id),
+                delta: try c.decode(String.self, forKey: .delta),
+                final: try c.decode(Bool.self, forKey: .final))
+        case "widget.command":
+            self = .widgetCommand(
+                id: try c.decode(String.self, forKey: .id),
+                command: try c.decode(String.self, forKey: .command))
+        case "tool.activity":
+            self = .toolActivity(
+                id: try c.decode(String.self, forKey: .id),
+                tool: try c.decode(String.self, forKey: .tool),
+                op: try c.decode(String.self, forKey: .op),
+                status: try c.decode(String.self, forKey: .status),
+                detail: try c.decodeIfPresent(String.self, forKey: .detail))
         case "breaker.preview":
             self = .breakerPreview(
                 id: try c.decode(String.self, forKey: .id),
@@ -226,6 +301,47 @@ enum Frame: Codable, Equatable {
         case .breakerCancel(let id):
             try c.encode("breaker.cancel", forKey: .type)
             try c.encode(id, forKey: .id)
+        case .override(let active, let ttlMs):
+            try c.encode("override", forKey: .type)
+            try c.encode(active, forKey: .active)
+            try c.encodeIfPresent(ttlMs, forKey: .ttlMs)
+        case .capabilities(let brain, let daemon, let version, let injectCap, let tools, let integrations):
+            try c.encode("capabilities", forKey: .type)
+            try c.encode(brain, forKey: .brain)
+            try c.encode(daemon, forKey: .daemon)
+            try c.encode(version, forKey: .version)
+            try c.encode(injectCap, forKey: .injectCap)
+            try c.encode(tools, forKey: .tools)
+            try c.encode(integrations, forKey: .integrations)
+        case .stats(let id, let brain, let model, let promptTokens, let outputTokens, let tokensPerSec, let evalMs, let loadMs, let totalMs, let contextWindow, let estCostUsd):
+            try c.encode("stats", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(brain, forKey: .brain)
+            try c.encodeIfPresent(model, forKey: .model)
+            try c.encodeIfPresent(promptTokens, forKey: .promptTokens)
+            try c.encodeIfPresent(outputTokens, forKey: .outputTokens)
+            try c.encodeIfPresent(tokensPerSec, forKey: .tokensPerSec)
+            try c.encodeIfPresent(evalMs, forKey: .evalMs)
+            try c.encodeIfPresent(loadMs, forKey: .loadMs)
+            try c.encodeIfPresent(totalMs, forKey: .totalMs)
+            try c.encodeIfPresent(contextWindow, forKey: .contextWindow)
+            try c.encodeIfPresent(estCostUsd, forKey: .estCostUsd)
+        case .say(let id, let delta, let final):
+            try c.encode("say", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(delta, forKey: .delta)
+            try c.encode(final, forKey: .final)
+        case .widgetCommand(let id, let command):
+            try c.encode("widget.command", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(command, forKey: .command)
+        case .toolActivity(let id, let tool, let op, let status, let detail):
+            try c.encode("tool.activity", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(tool, forKey: .tool)
+            try c.encode(op, forKey: .op)
+            try c.encode(status, forKey: .status)
+            try c.encodeIfPresent(detail, forKey: .detail)
         case .breakerPreview(let id, let summary, let estimatedSpend, let tier):
             try c.encode("breaker.preview", forKey: .type)
             try c.encode(id, forKey: .id)

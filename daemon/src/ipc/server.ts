@@ -265,12 +265,23 @@ export function startIpc(
  */
 export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
   switch (frame.type) {
-    case 'utterance':
+    case 'utterance': {
+      // A streaming brain surfaces deltas via `onToken`; we forward each as a `say` frame for a
+      // real-time render + TTS. When that happens, the terminal `reply` is REPLACED by a final
+      // `say{final}` so the client doesn't render the answer twice.
+      let streamed = false;
       enqueue({
         source: 'user',
         id: frame.id,
         payload: frame.text,
-        reply: (text: string) => send(conn, { type: 'reply', id: frame.id, text }),
+        onToken: (delta: string) => {
+          streamed = true;
+          send(conn, { type: 'say', id: frame.id, delta, final: false });
+        },
+        reply: (text: string) => {
+          if (streamed) send(conn, { type: 'say', id: frame.id, delta: '', final: true });
+          else send(conn, { type: 'reply', id: frame.id, text });
+        },
         // Per-turn telemetry → a stats frame the client renders under the answer (tokens/sec, cost…).
         // The same stats also feed the daemon's cumulative session accumulator so the `usage`
         // meta-command (and a natural-language "how much have I used") can report authoritative totals.
@@ -279,8 +290,14 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
           recordTurn(stats);
           send(conn, stats);
         },
+        // Background tool use → a `tool.activity` frame so the Face can show what KERNEL is doing
+        // ("🔧 web · searching…", then a brief ✓). Purely informational; drives no action.
+        onToolActivity: (event) => {
+          send(conn, { type: 'tool.activity', id: frame.id, ...event });
+        },
       });
       break;
+    }
     case 'ping':
       send(conn, { type: 'pong', id: frame.id });
       break;

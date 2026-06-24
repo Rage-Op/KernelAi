@@ -54,16 +54,7 @@ struct EmailPreviewWidget: View {
 
     var body: some View {
         content
-            .padding(Tokens.Space.lg)
-            .frame(maxWidth: 400, alignment: .leading)
-            .background(Tokens.denseMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.widget))
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Radius.widget)
-                    .stroke(Tokens.hairline, lineWidth: 1))
-            .scaleEffect(isPresented ? Motion.bloomEndScale : Motion.bloomStartScale)
-            .opacity(isPresented ? 1 : 0)
-            .blur(radius: isPresented ? 0 : Motion.depthBlurRadius)
-            .animation(isPresented ? Motion.bloom : Motion.dissolve, value: isPresented)
+            .kernelCard(isPresented: isPresented, maxWidth: 440)
     }
 
     @ViewBuilder
@@ -84,6 +75,11 @@ struct EmailPreviewWidget: View {
 
     private var populated: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.md) {
+            CardHeader(dot: Tokens.accentTerracotta, title: "Kernel's draft reply") {
+                Text("draft")
+                    .font(Tokens.Typography.monoCaption)
+                    .foregroundStyle(Tokens.textDim)
+            }
             // To (addresses in Label 14) + external marker when externally sourced.
             HStack(spacing: Tokens.Space.sm) {
                 Text("To")
@@ -94,44 +90,55 @@ struct EmailPreviewWidget: View {
                     .foregroundStyle(Tokens.textPrimary)
                 if payload.toIsExternal {
                     Text("external")
-                        .font(Tokens.Typography.label)
-                        .foregroundStyle(Tokens.accentCyan)
+                        .font(Tokens.Typography.monoCaption)
+                        .foregroundStyle(Tokens.accentTerracotta)
                         .padding(.horizontal, Tokens.Space.sm)
                         .frame(minHeight: 22)
-                        .overlay(Capsule().stroke(Tokens.accentCyan, lineWidth: 1)) // accent-ringed marker
+                        .overlay(Capsule().stroke(Tokens.accentTerracotta, lineWidth: 1)) // accent-ringed marker
                 }
             }
             // Subject.
             Text(payload.subject)
                 .font(Tokens.Typography.heading)
                 .foregroundStyle(Tokens.textPrimary)
-            // Body (Body 16) + signature, read-only.
-            Text(payload.body)
-                .font(Tokens.Typography.body)
-                .foregroundStyle(Tokens.textPrimary)
-            if !payload.signature.isEmpty {
-                Text(payload.signature)
-                    .font(Tokens.Typography.label)
-                    .foregroundStyle(Tokens.textMuted)
+            // Body (Body 16) + signature, read-only, in a warm well.
+            VStack(alignment: .leading, spacing: Tokens.Space.sm) {
+                Text(payload.body)
+                    .font(Tokens.Typography.body)
+                    .foregroundStyle(Tokens.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !payload.signature.isEmpty {
+                    Text(payload.signature)
+                        .font(Tokens.Typography.label)
+                        .foregroundStyle(Tokens.textMuted)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Tokens.Space.md)
+            .background(Tokens.chipFill, in: RoundedRectangle(cornerRadius: Tokens.Radius.chip, style: .continuous))
             controls
         }
     }
 
-    /// Exactly two controls: Edit (re-preview) and Send (the single accent-filled CTA).
+    /// Exactly two controls: "Speak to revise" (re-opens the draft to revise — the onEdit path, never
+    /// sends) and Send (the single accent-filled CTA — the only send path).
     private var controls: some View {
         HStack(spacing: Tokens.Space.md) {
             Button {
                 onEdit?()
             } label: {
-                Text("Edit")
-                    .font(Tokens.Typography.body)
-                    .foregroundStyle(Tokens.textPrimary)
-                    .padding(.horizontal, Tokens.Space.lg)
-                    .frame(minHeight: 44)
-                    .overlay(Capsule().stroke(Tokens.hairline, lineWidth: 1))
+                HStack(spacing: Tokens.Space.sm) {
+                    Image(systemName: "mic.fill").font(.system(size: 12, weight: .medium))
+                    Text("Speak to revise").font(Tokens.Typography.body)
+                }
+                .foregroundStyle(Tokens.accentTerracotta)
+                .padding(.horizontal, Tokens.Space.lg)
+                .frame(minHeight: 44)
+                .overlay(Capsule().stroke(Tokens.accentTerracotta.opacity(0.6), lineWidth: 1))
             }
             .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
 
             Button {
                 // The ONLY send path — emits the Yellow ui.intent via the parent. The daemon
@@ -144,7 +151,7 @@ struct EmailPreviewWidget: View {
                     .foregroundStyle(Tokens.canvas)
                     .padding(.horizontal, Tokens.Space.lg)
                     .frame(minHeight: 44)
-                    .background(Capsule().fill(Tokens.accentCyan))   // accent-filled CTA
+                    .background(Capsule().fill(Tokens.accentTerracotta))   // accent-filled CTA
             }
             .buttonStyle(.plain)
         }

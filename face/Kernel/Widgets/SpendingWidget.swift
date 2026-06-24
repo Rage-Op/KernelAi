@@ -51,16 +51,7 @@ struct SpendingWidget: View {
 
     var body: some View {
         content
-            .padding(Tokens.Space.lg)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(Tokens.denseMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.widget))
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Radius.widget)
-                    .stroke(Tokens.hairline, lineWidth: 1))
-            .scaleEffect(isPresented ? Motion.bloomEndScale : Motion.bloomStartScale)
-            .opacity(isPresented ? 1 : 0)
-            .blur(radius: isPresented ? 0 : Motion.depthBlurRadius)
-            .animation(isPresented ? Motion.bloom : Motion.dissolve, value: isPresented)
+            .kernelCard(isPresented: isPresented, maxWidth: 420)
             .onAppear { selected = payload.timeframe }
     }
 
@@ -84,11 +75,24 @@ struct SpendingWidget: View {
 
     private var populated: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.md) {
-            segmentedControl
-            Text(money(payload.total))
-                .font(Tokens.Typography.display)
-                .monospacedDigit()                          // tabular total
-                .foregroundStyle(Tokens.textPrimary)
+            // "Daily spend" header — green marker + the W/M/Y toggle on the trailing edge.
+            CardHeader(dot: Tokens.statusGreen, title: "Daily spend") {
+                segmentedControl
+            }
+            // Total + trend delta, with the per-day average on the trailing edge.
+            HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.sm) {
+                Text(money(payload.total))
+                    .font(Tokens.Typography.display)
+                    .monospacedDigit()
+                    .foregroundStyle(Tokens.textPrimary)
+                if let delta = trendDelta { deltaBadge(delta) }
+                Spacer(minLength: Tokens.Space.sm)
+                if let avg = averagePerDay {
+                    Text("avg \(money(avg))/day")
+                        .font(Tokens.Typography.monoLabel)
+                        .foregroundStyle(Tokens.textMuted)
+                }
+            }
             chart
         }
     }
@@ -102,32 +106,83 @@ struct SpendingWidget: View {
                     withAnimation(Motion.cloudState) { selected = tf } // spring; nothing snaps
                 } label: {
                     Text(tf.label)
-                        .font(Tokens.Typography.label)
+                        .font(Tokens.Typography.monoCaption)
                         .foregroundStyle(isActive ? Tokens.canvas : Tokens.textMuted)
-                        .padding(.horizontal, Tokens.Space.md)
-                        .frame(minHeight: 28)
+                        .padding(.horizontal, Tokens.Space.sm)
+                        .frame(minHeight: 22)
                         .background(
-                            Capsule().fill(isActive ? Tokens.accentCyan : Color.clear)) // accent only when active
+                            Capsule().fill(isActive ? Tokens.accentTerracotta : Color.clear)) // accent only when active
                         .overlay(Capsule().stroke(isActive ? Color.clear : Tokens.hairline, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .frame(minWidth: 44, minHeight: 44)
             }
         }
     }
 
-    /// A simple structured bar chart over the series (no remote-resource load; SwiftUI shapes).
+    /// A ▲/▼ delta pill (the design's green "▲ 12%"). Derived from the series trend; omitted when
+    /// the series is too short to compute one.
+    private func deltaBadge(_ pct: Double) -> some View {
+        let up = pct >= 0
+        return HStack(spacing: 2) {
+            Image(systemName: up ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                .font(.system(size: 8))
+            Text("\(abs(Int(pct.rounded())))%")
+                .font(Tokens.Typography.monoCaption)
+                .monospacedDigit()
+        }
+        .foregroundStyle(Tokens.statusGreen)
+        .padding(.horizontal, Tokens.Space.sm)
+        .frame(minHeight: 20)
+        .background(Capsule().fill(Tokens.statusGreen.opacity(0.14)))
+    }
+
+    /// A terracotta area+line chart over the series (SwiftUI Canvas — no remote-resource load).
     private var chart: some View {
-        let maxAmount = max(payload.series.map { abs($0.amount) }.max() ?? 1, 1)
-        return HStack(alignment: .bottom, spacing: Tokens.Space.xs) {
-            ForEach(payload.series) { point in
-                Capsule()
-                    .fill(Tokens.accentIndigo.opacity(0.7))
-                    .frame(width: 8, height: max(4, CGFloat(abs(point.amount) / maxAmount) * 80))
+        Canvas { ctx, size in
+            let series = payload.series
+            guard series.count > 1 else { return }
+            let maxV = max(series.map { abs($0.amount) }.max() ?? 1, 1)
+            let stepX = size.width / CGFloat(series.count - 1)
+            func point(_ i: Int) -> CGPoint {
+                let v = abs(series[i].amount) / maxV
+                return CGPoint(x: CGFloat(i) * stepX, y: size.height * (1 - 0.9 * v) - 4)
+            }
+            var line = Path()
+            line.move(to: point(0))
+            for i in 1..<series.count { line.addLine(to: point(i)) }
+
+            var area = line
+            area.addLine(to: CGPoint(x: size.width, y: size.height))
+            area.addLine(to: CGPoint(x: 0, y: size.height))
+            area.closeSubpath()
+            ctx.fill(area, with: .linearGradient(
+                Gradient(colors: [Tokens.accentTerracotta.opacity(0.35), Tokens.accentTerracotta.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: 0),
+                endPoint: CGPoint(x: 0, y: size.height)))
+            ctx.stroke(line, with: .color(Tokens.accentTerracotta), lineWidth: 2)
+            for i in 0..<series.count {
+                let p = point(i)
+                ctx.fill(Path(ellipseIn: CGRect(x: p.x - 2.5, y: p.y - 2.5, width: 5, height: 5)),
+                         with: .color(Tokens.accentBright))
             }
         }
-        .frame(height: 80, alignment: .bottom)
+        .frame(height: 84)
         .animation(Motion.cloudState, value: selected)      // series eases between timeframes
+    }
+
+    /// Per-day average across the series buckets (nil when there are no buckets).
+    private var averagePerDay: Double? {
+        guard !payload.series.isEmpty else { return nil }
+        return payload.total / Double(payload.series.count)
+    }
+
+    /// Trend delta (%) from the first to the last bucket; nil when the series is too short.
+    private var trendDelta: Double? {
+        let s = payload.series
+        guard s.count >= 2 else { return nil }
+        let first = abs(s.first!.amount), last = abs(s.last!.amount)
+        guard first > 0 else { return nil }
+        return (last - first) / first * 100
     }
 
     private func money(_ value: Double) -> String {

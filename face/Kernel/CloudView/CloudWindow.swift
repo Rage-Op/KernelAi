@@ -9,6 +9,8 @@ import SwiftUI
 /// dissolve back into it (CLOUD-04); the widget views own their own bloom/dissolve.
 struct CloudWindow: View {
     @ObservedObject var coordinator: AppCoordinator
+    /// Extra bottom padding so bloomed widgets clear the RuntimeWindow chrome (telemetry + dock).
+    var bottomInset: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -54,7 +56,7 @@ struct CloudWindow: View {
                     widgetView(named: name)
                 }
             }
-            .padding(.bottom, Tokens.Space.xxl)                    // 48px stage inset
+            .padding(.bottom, Tokens.Space.xxl + bottomInset)      // 48px stage inset + chrome clearance
         }
         .transition(.opacity)
     }

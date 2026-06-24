@@ -35,6 +35,12 @@ const GREEN_OPS = new Set<string>([
   'navigate',
   'goto',
   'scrape',
+  // Web tool read ops (WS-B) — read-only internet lookups; reversible, no world change. 'web' is
+  // here as the tool-name fallback so an op-less `web` call (small models sometimes omit `op`) still
+  // classifies GREEN rather than default-denying to Red — the whole tool is read-only by construction.
+  'search',
+  'fetch',
+  'web',
   'draft',
   'press',
   'hotkey',

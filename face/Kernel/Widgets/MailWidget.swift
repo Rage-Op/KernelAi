@@ -75,16 +75,7 @@ struct MailWidget: View {
 
     var body: some View {
         content
-            .padding(Tokens.Space.lg)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(Tokens.widgetMaterial, in: RoundedRectangle(cornerRadius: Tokens.Radius.widget))
-            .overlay(
-                RoundedRectangle(cornerRadius: Tokens.Radius.widget)
-                    .stroke(Tokens.hairline, lineWidth: 1))
-            .scaleEffect(isPresented ? Motion.bloomEndScale : Motion.bloomStartScale)
-            .opacity(isPresented ? 1 : 0)
-            .blur(radius: isPresented ? 0 : Motion.depthBlurRadius)
-            .animation(isPresented ? Motion.bloom : Motion.dissolve, value: isPresented)
+            .kernelCard(isPresented: isPresented, maxWidth: 380)
             .onChange(of: isPresented) { _, presented in
                 if presented { startCountUp() } else { displayedCount = 0 }
             }
@@ -104,28 +95,46 @@ struct MailWidget: View {
 
     private var populated: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.md) {
-            Text("\(displayedCount) \(displayedCount == 1 ? "message" : "messages")")
-                .font(Tokens.Typography.display)
-                .monospacedDigit()                         // tabular numerals (count)
-                .foregroundStyle(Tokens.textPrimary)
+            // "Inbox summary" header — blue marker + the tabular message count.
+            CardHeader(dot: Tokens.catBlue, title: "Inbox summary") {
+                Text("\(displayedCount)")
+                    .font(Tokens.Typography.monoLabel)
+                    .monospacedDigit()
+                    .foregroundStyle(Tokens.textMuted)
+            }
 
             VStack(alignment: .leading, spacing: Tokens.Space.md) {
-                ForEach(payload.items) { item in
-                    VStack(alignment: .leading, spacing: Tokens.Space.xs) {
-                        Text(item.sender)
-                            .font(Tokens.Typography.label)
-                            .foregroundStyle(Tokens.textMuted)
-                        Text(item.subject)
-                            .font(Tokens.Typography.body)
-                            .foregroundStyle(Tokens.textPrimary)
-                        Text(item.snippet)
-                            .font(Tokens.Typography.label)
-                            .foregroundStyle(Tokens.textMuted)
-                            .lineLimit(1)
-                        chips(for: item)
-                    }
+                ForEach(payload.items) { item in mailRow(item) }
+            }
+        }
+    }
+
+    /// One mail row: sender + a source/urgent marker, the subject, a one-line snippet, then the
+    /// suggested-action chips.
+    private func mailRow(_ item: MailItem) -> some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.xs) {
+            HStack(spacing: Tokens.Space.sm) {
+                Text(item.sender)
+                    .font(Tokens.Typography.label)
+                    .foregroundStyle(Tokens.textSecondary)
+                Spacer(minLength: Tokens.Space.sm)
+                if item.source == "external" {
+                    Text("external")
+                        .font(Tokens.Typography.monoCaption)
+                        .foregroundStyle(Tokens.textDim)
+                        .padding(.horizontal, Tokens.Space.sm)
+                        .frame(minHeight: 18)
+                        .overlay(Capsule().stroke(Tokens.hairline, lineWidth: 1))
                 }
             }
+            Text(item.subject)
+                .font(Tokens.Typography.body)
+                .foregroundStyle(Tokens.textPrimary)
+            Text(item.snippet)
+                .font(Tokens.Typography.label)
+                .foregroundStyle(Tokens.textMuted)
+                .lineLimit(1)
+            chips(for: item)
         }
     }
 
@@ -140,13 +149,13 @@ struct MailWidget: View {
                 } label: {
                     Text(action.label)
                         .font(Tokens.Typography.label)
-                        .foregroundStyle(isActive ? Tokens.accentCyan : Tokens.textMuted)
+                        .foregroundStyle(isActive ? Tokens.accentTerracotta : Tokens.textMuted)
                         .padding(.horizontal, Tokens.Space.md)
                         .frame(minHeight: 28)              // chip min height (§2)
-                        .background(Tokens.denseMaterial, in: Capsule())
+                        .background(Tokens.chipFill, in: Capsule())
                         .overlay(
                             Capsule().stroke(
-                                isActive ? Tokens.accentCyan : Tokens.hairline,
+                                isActive ? Tokens.accentTerracotta : Tokens.hairline,
                                 lineWidth: isActive ? 1.5 : 1))   // accent ring only when active
                 }
                 .buttonStyle(.plain)

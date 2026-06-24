@@ -64,6 +64,71 @@ export const PROFILE_DIR = path.join(
 /** The ONE persistent context (RESEARCH.md Pitfall 8: reuse across calls, never respawn per dispatch). */
 let ctx: BrowserContext | null = null;
 
+// ─── WS-C hardening knobs ────────────────────────────────────────────────────
+/** Default navigation timeout — generous for slow-loading finance SPAs (was an implicit short one). */
+const DEFAULT_NAV_TIMEOUT_MS = 10_000;
+/** Retries for a transient navigation failure (network blip), with exponential backoff. */
+const MAX_NAV_RETRIES = 3;
+/** Timeout for surfacing a fill target's DOM signals to the credential fence. */
+const FILL_SIGNAL_TIMEOUT_MS = 2_000;
+
+/**
+ * Is `url`'s host permitted by the optional allowlist? An empty/absent allowlist allows everything
+ * (backward-compatible); when present, the host must contain one of the entries (substring match on
+ * the host, so "chase.com" matches "secure.chase.com"). A malformed URL is denied.
+ */
+export function hostAllowed(url: string, allow?: string[]): boolean {
+  if (!allow || allow.length === 0) return true;
+  try {
+    const host = new URL(url).host.toLowerCase();
+    return allow.some((a) => host.includes(a.toLowerCase()));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Classify a 2FA / CAPTCHA wall from page text so KERNEL STOPS and hands off to the owner instead
+ * of blindly proceeding past an auth challenge. Pure (testable) — the page-reading wrapper is below.
+ */
+export function detectChallenge(text: string): '2fa' | 'captcha' | null {
+  if (/recaptcha|hcaptcha|\bcaptcha\b|not a robot|verify (you('| a)?re|that you are) human/i.test(text)) {
+    return 'captcha';
+  }
+  if (/two[- ]?factor|\b2fa\b|verification code|one[- ]?time (code|password|passcode)|\botp\b|authenticator app|enter the code (we|that was)? ?sent/i.test(text)) {
+    return '2fa';
+  }
+  return null;
+}
+
+/** Navigate with exponential backoff so a transient network blip retries instead of escalating. */
+async function gotoWithRetry(p: Page, url: string, timeoutMs: number): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= MAX_NAV_RETRIES; attempt++) {
+    try {
+      await p.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_NAV_RETRIES) {
+        const backoff = 100 * 2 ** attempt; // 100 → 200 → 400 ms
+        await new Promise((r) => setTimeout(r, backoff));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/** Read the live page's visible text and classify any 2FA/CAPTCHA challenge (best-effort). */
+async function detectChallengeOnPage(p: Page): Promise<'2fa' | 'captcha' | null> {
+  try {
+    const text = (await p.locator('body').first().textContent({ timeout: 1500 })) ?? '';
+    return detectChallenge(text);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Lazily launch ONE headful Chromium against the dedicated profile dir and cache the context.
  * Subsequent calls reuse the cached context. Headful, plain Chromium (no evasion plugins).
@@ -109,11 +174,15 @@ export async function __resetForTest(): Promise<void> {
  * Navigate to `url`, logging the FULL URL + provenance on EVERY goto (HANDS-03 acceptance —
  * the egress-logging seam). Exported so the egress log point is independently testable.
  */
-export async function navigate(url: string, provenance: Provenance): Promise<Page> {
+export async function navigate(
+  url: string,
+  provenance: Provenance,
+  timeoutMs: number = DEFAULT_NAV_TIMEOUT_MS,
+): Promise<Page> {
   const p = await page();
   // EVERY navigation logs the full URL + provenance BEFORE the goto (RESEARCH.md Pitfall 5).
   logger.info({ tool: 'browser', url, provenance }, 'browser: navigate');
-  await p.goto(url, { waitUntil: 'domcontentloaded' });
+  await gotoWithRetry(p, url, timeoutMs); // transient blips retry with backoff; a real failure throws.
   return p;
 }
 
@@ -167,6 +236,9 @@ export const browserArgsSchema = z
     text_selector: z.string().optional(),
     // value to type (fill)
     text: z.string().optional(),
+    // WS-C hardening: per-call navigation timeout (ms) + an optional host allowlist (egress control)
+    timeout_ms: z.number().optional(),
+    allow: z.array(z.string()).optional(),
     // fence signals — surfaced by the adapter from the DOM for the fill op (HANDS-05)
     fieldType: z.string().optional(),
     autocomplete: z.string().optional(),
@@ -195,8 +267,32 @@ export const browserTool: Tool = {
         case 'navigate': {
           const url = String(args.url ?? '');
           if (!url) return { ok: false, escalation: { reason: 'browser navigate: no url' } };
+          // EGRESS CONTROL (WS-C): if an allowlist is supplied, the host must be on it.
+          const allow = Array.isArray(args.allow) ? (args.allow as unknown[]).map(String) : undefined;
+          if (!hostAllowed(url, allow)) {
+            return {
+              ok: false,
+              escalation: {
+                reason: `browser navigate blocked: ${url} is not in the allowlist`,
+                recommendation: 'Add the host to `allow`, or omit `allow` to permit any host.',
+              },
+            };
+          }
           const provenance = (args.provenance as Provenance) ?? 'self';
-          await navigate(url, provenance);
+          const timeoutMs = typeof args.timeout_ms === 'number' ? args.timeout_ms : DEFAULT_NAV_TIMEOUT_MS;
+          const p = await navigate(url, provenance, timeoutMs);
+          // 2FA / CAPTCHA HANDOFF (WS-C): don't blunder past an auth wall — stop and hand off to the
+          // owner in the visible headful window.
+          const challenge = await detectChallengeOnPage(p);
+          if (challenge) {
+            return {
+              ok: false,
+              escalation: {
+                reason: `browser navigate: a ${challenge} challenge is on the page (${url})`,
+                recommendation: `Complete the ${challenge} in the Kernel browser window, then retry.`,
+              },
+            };
+          }
           return { ok: true, data: { navigated: url } };
         }
 
@@ -204,6 +300,21 @@ export const browserTool: Tool = {
           const p = await page();
           // role/label/text locator — never brittle CSS (RESEARCH.md Pitfall 15).
           const loc = locate(p, args);
+          // DIAGNOSTIC (WS-C): a zero-element locator means the page layout changed (or no locator
+          // was given) — escalate with a page-text snippet instead of silently returning empty.
+          if ((await loc.count()) === 0) {
+            const pageText = ((await p.locator('body').first().textContent().catch(() => '')) ?? '')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 200);
+            return {
+              ok: false,
+              escalation: {
+                reason: 'browser scrape: locator matched 0 elements — the page layout may have changed',
+                recommendation: pageText ? `Page begins: "${pageText}…"` : 'The page appears empty.',
+              },
+            };
+          }
           const content = await loc.first().textContent();
           const url = p.url();
           // External-sourced web read — tainted at the READ site (Phase-1 Provenance).
@@ -259,7 +370,7 @@ export async function surfaceFillSignals(args: Record<string, unknown>): Promise
   try {
     const loc = locate(p, args).first();
     // DOM secure-field signals, read straight from the element.
-    const handle = await loc.elementHandle({ timeout: 2000 });
+    const handle = await loc.elementHandle({ timeout: FILL_SIGNAL_TIMEOUT_MS });
     if (!handle) return;
     const [type, autocomplete] = await Promise.all([
       handle.getAttribute('type'),
