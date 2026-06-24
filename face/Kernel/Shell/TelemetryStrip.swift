@@ -9,6 +9,9 @@ struct TelemetryStrip: View {
 
     var body: some View {
         HStack(spacing: Tokens.Space.md) {
+            // Live local-server (Ollama) health — ● ready / loading / error, from model.state.
+            ollamaStatus
+            dot
             // Throughput — the value already carries the "tok/s" unit, so no separate label.
             Text(TelemetryFormat.tokensPerSec(coordinator.lastStats?.tokensPerSec))
                 .foregroundStyle(Tokens.textSecondary)
@@ -32,6 +35,25 @@ struct TelemetryStrip: View {
 
     private var dot: some View {
         Text("·").foregroundStyle(Tokens.textDim)
+    }
+
+    /// Live local-server health: a coloured dot + "ollama" (or "claude" for the cloud brain).
+    /// Green = model loaded & ready, amber = warming up, red = down / model missing. Sourced from
+    /// the daemon's `model.state` so it reflects the REAL Ollama state, not a guess.
+    private var ollamaStatus: some View {
+        let (color, label): (Color, String) = {
+            if coordinator.brain == .cloud { return (Tokens.statusGreen, "claude") }
+            switch coordinator.modelStatus {
+            case .ready: return (Tokens.statusGreen, "ollama")
+            case .loading: return (Tokens.accentAmber, "ollama")
+            case .error: return (Tokens.statusRed, "ollama")
+            }
+        }()
+        return HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(label).foregroundStyle(Tokens.textDim)
+        }
+        .help(coordinator.modelDetail)
     }
 
     /// A `label value` pair: dim label, brighter mono value.

@@ -104,6 +104,13 @@ struct RuntimeWindow: View {
     private var bottomChrome: some View {
         VStack(spacing: Tokens.Space.md) {
             TelemetryStrip(coordinator: coordinator)
+            // LIVE PROMPT-PROCESSING / GENERATION bar — a sweeping indeterminate bar while the model
+            // works, so a turn never looks frozen (prompt processing → token generation).
+            if coordinator.isAwaitingReply || coordinator.isStreamingReply {
+                ProcessingBar(label: coordinator.isStreamingReply ? "Generating…" : "Processing prompt…")
+                    .frame(maxWidth: 360)
+                    .transition(.opacity)
+            }
             // BACKGROUND TOOL USE (live): shows what KERNEL is doing right now — "🔧 web · searching…".
             if let activity = coordinator.toolActivity {
                 HStack(spacing: Tokens.Space.sm) {
@@ -175,5 +182,37 @@ private struct ModePill: View {
         .background(Tokens.surface.opacity(0.9), in: Capsule())
         .overlay(Capsule().stroke(Tokens.hairline, lineWidth: 1))
         .transition(.scale(scale: 0.9).combined(with: .opacity))
+    }
+}
+
+/// A slim indeterminate progress bar with a label — shown while the model is processing the prompt
+/// or generating, so a working turn always reads as ALIVE (never a frozen pause). The highlight
+/// sweeps left→right on a repeating animation (Ollama doesn't expose live prompt-eval progress, so an
+/// honest indeterminate sweep is the right signal).
+private struct ProcessingBar: View {
+    let label: String
+    @State private var sweep = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(Tokens.Typography.monoCaption)
+                .foregroundStyle(Tokens.accentTerracotta)
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Tokens.chipFill)
+                    Capsule()
+                        .fill(Tokens.accentTerracotta)
+                        .frame(width: w * 0.32)
+                        .offset(x: sweep ? w * 0.85 : -w * 0.32)
+                }
+            }
+            .frame(height: 3)
+        }
+        .onAppear {
+            sweep = false
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) { sweep = true }
+        }
     }
 }
