@@ -169,6 +169,72 @@ final class FrameCodecTests: XCTestCase {
         XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"breaker.preview\",\"id\":\"x\",\"summary\":\"s\",\"tier\":\"red\"}"))
     }
 
+    // MARK: control surface (SAFE-08) — override.state / settings.update / settings.state / audit
+
+    func testOverrideStateFrameDecodesAndRoundTrips() throws {
+        let active = FrameCodec.decode(line: "{\"type\":\"override.state\",\"active\":true,\"scope\":\"face-override\",\"expiresAt\":1782330000000}")
+        guard case let .overrideState(a, scope, expiresAt) = active else {
+            return XCTFail("expected .overrideState, got \(String(describing: active))")
+        }
+        XCTAssertTrue(a)
+        XCTAssertEqual(scope, "face-override")
+        XCTAssertEqual(expiresAt, 1782330000000)
+        XCTAssertEqual(active, FrameCodec.decode(line: try FrameCodec.encodeLine(active!)), "override.state round-trips")
+
+        // the inactive shape — scope/expiry absent.
+        let off = FrameCodec.decode(line: "{\"type\":\"override.state\",\"active\":false}")
+        guard case let .overrideState(offActive, offScope, offExp) = off else {
+            return XCTFail("expected inactive .overrideState")
+        }
+        XCTAssertFalse(offActive)
+        XCTAssertNil(offScope)
+        XCTAssertNil(offExp)
+    }
+
+    func testSettingsUpdateAndStateRoundTrip() throws {
+        // Face→daemon update (one field at a time).
+        let upd = FrameCodec.decode(line: "{\"type\":\"settings.update\",\"breakerEnabled\":true}")
+        guard case let .settingsUpdate(be, ceil, ttl) = upd else {
+            return XCTFail("expected .settingsUpdate, got \(String(describing: upd))")
+        }
+        XCTAssertEqual(be, true)
+        XCTAssertNil(ceil)
+        XCTAssertNil(ttl)
+        XCTAssertEqual(upd, FrameCodec.decode(line: try FrameCodec.encodeLine(upd!)), "settings.update round-trips")
+
+        // daemon→Face state (all required).
+        let st = FrameCodec.decode(line: "{\"type\":\"settings.state\",\"breakerEnabled\":false,\"dailySpendCeiling\":30,\"defaultTtlMs\":600000}")
+        guard case let .settingsState(sbe, sceil, sttl) = st else {
+            return XCTFail("expected .settingsState, got \(String(describing: st))")
+        }
+        XCTAssertFalse(sbe)
+        XCTAssertEqual(sceil, 30)
+        XCTAssertEqual(sttl, 600000)
+        XCTAssertEqual(st, FrameCodec.decode(line: try FrameCodec.encodeLine(st!)), "settings.state round-trips")
+        // a settings.state missing the ceiling must fail (not silently default).
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"settings.state\",\"breakerEnabled\":false,\"defaultTtlMs\":600000}"))
+    }
+
+    func testAuditQueryAndDataRoundTrip() throws {
+        let q = FrameCodec.decode(line: "{\"type\":\"audit.query\",\"id\":\"q1\",\"limit\":50}")
+        guard case let .auditQuery(qid, limit) = q else {
+            return XCTFail("expected .auditQuery, got \(String(describing: q))")
+        }
+        XCTAssertEqual(qid, "q1")
+        XCTAssertEqual(limit, 50)
+
+        let d = FrameCodec.decode(line: "{\"type\":\"audit.data\",\"id\":\"q1\",\"entries\":[{\"tool\":\"shell\",\"outcome\":\"executed\",\"ts\":\"2026-06-24T10:00:00.000Z\"},{\"tool\":\"fs\",\"outcome\":\"cancelled\",\"ts\":\"2026-06-24T10:01:00.000Z\"}]}")
+        guard case let .auditData(did, entries) = d else {
+            return XCTFail("expected .auditData, got \(String(describing: d))")
+        }
+        XCTAssertEqual(did, "q1")
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries[0].tool, "shell")
+        XCTAssertEqual(entries[0].outcome, "executed")
+        XCTAssertEqual(entries[1].outcome, "cancelled")
+        XCTAssertEqual(d, FrameCodec.decode(line: try FrameCodec.encodeLine(d!)), "audit.data round-trips")
+    }
+
     // MARK: malformed tolerated (T-03-13)
 
     func testMalformedLineDoesNotCrashDecoder() {

@@ -14,6 +14,8 @@ struct SettingsView: View {
                 Text("SETTINGS")
                     .font(Tokens.Typography.monoCaption).tracking(2).foregroundStyle(Tokens.textDim)
                 brainSection
+                safetySection
+                activitySection
                 launchSection
                 keysSection
                 toolsSection
@@ -23,6 +25,121 @@ struct SettingsView: View {
             .padding(Tokens.Space.xxl)
         }
         .background(Tokens.canvas)
+        .onAppear { coordinator.requestAudit() }
+    }
+
+    // MARK: Safety & access (SAFE-08) — /override, the Red breaker, the spend ceiling
+
+    private var safetySection: some View {
+        card("SAFETY & ACCESS") {
+            // /override status + control (Green full-speed, Yellow proceed+notify; never Red).
+            HStack(spacing: Tokens.Space.sm) {
+                Circle().fill(coordinator.overrideActive ? Tokens.statusGreen : Tokens.textDim)
+                    .frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Override — Green + Yellow").font(Tokens.Typography.body).foregroundStyle(Tokens.textSecondary)
+                    Text(coordinator.overrideActive
+                         ? "Active — reversible actions run full-speed."
+                         : "Off — normal friction. Never unlocks destructive (Red) actions.")
+                        .font(Tokens.Typography.label).foregroundStyle(Tokens.textMuted)
+                }
+                Spacer()
+                if coordinator.overrideActive, let exp = coordinator.overrideExpiresAt {
+                    Text(exp, style: .timer)
+                        .font(Tokens.Typography.monoLabel).foregroundStyle(Tokens.accentBright)
+                        .monospacedDigit()
+                }
+                Button(coordinator.overrideActive ? "Deactivate" : "Activate") {
+                    if coordinator.overrideActive { coordinator.deactivateOverride() }
+                    else { coordinator.activateOverride() }
+                }
+                .font(Tokens.Typography.label).buttonStyle(.plain).foregroundStyle(Tokens.accentBright)
+            }
+
+            Divider().overlay(Tokens.hairline)
+
+            // The Red breaker master switch.
+            Toggle(isOn: Binding(
+                get: { coordinator.safety.breakerEnabled },
+                set: { coordinator.updateSafety(breakerEnabled: $0) })) {
+                Text("Allow gated destructive (Red) actions")
+                    .font(Tokens.Typography.body).foregroundStyle(Tokens.textSecondary)
+            }
+            .tint(Tokens.statusRed)
+            Text(coordinator.safety.breakerEnabled
+                 ? "On — a Red action shows a 10-second preview you can cancel; the spend ceiling + audit log still apply."
+                 : "Off — destructive actions are denied and escalated to you (the safe default).")
+                .font(Tokens.Typography.label)
+                .foregroundStyle(coordinator.safety.breakerEnabled ? Tokens.accentAmber : Tokens.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // The daily spend ceiling the breaker reserves against.
+            Stepper(value: Binding(
+                get: { coordinator.safety.dailySpendCeiling },
+                set: { coordinator.updateSafety(dailySpendCeiling: $0) }), in: 0...1000, step: 5) {
+                HStack {
+                    Text("Daily spend ceiling").font(Tokens.Typography.body).foregroundStyle(Tokens.textSecondary)
+                    Spacer()
+                    Text("$\(Int(coordinator.safety.dailySpendCeiling))")
+                        .font(Tokens.Typography.monoLabel).foregroundStyle(Tokens.textPrimary)
+                }
+            }
+
+            // The /override default duration.
+            Picker("Override duration", selection: Binding(
+                get: { coordinator.safety.defaultTtlMs },
+                set: { coordinator.updateSafety(defaultTtlMs: $0) })) {
+                Text("5 min").tag(300_000)
+                Text("10 min").tag(600_000)
+                Text("30 min").tag(1_800_000)
+                Text("1 hour").tag(3_600_000)
+            }
+            .pickerStyle(.menu)
+            .font(Tokens.Typography.label)
+        }
+    }
+
+    // MARK: Activity (SAFE-08) — the audit log of gated (Red) actions
+
+    private var activitySection: some View {
+        card("ACTIVITY") {
+            HStack {
+                Text("Every gated (Red) action is logged: what, the outcome, and when.")
+                    .font(Tokens.Typography.label).foregroundStyle(Tokens.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Refresh") { coordinator.requestAudit() }
+                    .font(Tokens.Typography.label).buttonStyle(.plain).foregroundStyle(Tokens.accentBright)
+            }
+            if coordinator.auditEntries.isEmpty {
+                Text("No gated actions recorded yet.")
+                    .font(Tokens.Typography.label).foregroundStyle(Tokens.textMuted)
+            } else {
+                let recent = Array(coordinator.auditEntries.reversed().prefix(20))
+                ForEach(Array(recent.enumerated()), id: \.offset) { _, entry in
+                    auditRow(entry)
+                }
+            }
+        }
+    }
+
+    private func auditRow(_ entry: AuditEntry) -> some View {
+        let color: Color = {
+            switch entry.outcome {
+            case "executed": return Tokens.statusGreen
+            case "cancelled": return Tokens.accentAmber
+            default: return Tokens.statusRed // denied / ceiling-exceeded / toctou-abort
+            }
+        }()
+        let when = String(entry.ts.prefix(16)).replacingOccurrences(of: "T", with: " ")
+        return HStack(spacing: Tokens.Space.sm) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(entry.tool).font(Tokens.Typography.monoEmphasis).foregroundStyle(Tokens.textPrimary)
+            Text(entry.outcome).font(Tokens.Typography.monoLabel).foregroundStyle(color)
+            Spacer()
+            Text(when).font(Tokens.Typography.monoLabel).foregroundStyle(Tokens.textMuted)
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: Brain

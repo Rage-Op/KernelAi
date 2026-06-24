@@ -87,6 +87,15 @@ struct HistoryTurn: Codable, Equatable {
     let ts: Double
 }
 
+/// One audit entry inside an `audit.data` frame (mirrors AuditDataSchema.entries[]). The SAFE
+/// projection only: tool name, terminal outcome, ISO timestamp — never a hash, args, or finance amount.
+struct AuditEntry: Codable, Equatable, Identifiable {
+    let tool: String
+    let outcome: String
+    let ts: String
+    var id: String { "\(ts)-\(tool)-\(outcome)" }
+}
+
 // MARK: - Frame (the discriminated union on `type`)
 
 /// The frozen frame contract, mirrored as a Swift enum keyed on `type`. A
@@ -149,6 +158,22 @@ enum Frame: Codable, Equatable {
     /// ADDITIVE (daemon→Face): the persisted chat history answering a `history.request` (same `id`).
     /// Mirrors HistoryDataSchema. Owner/assistant turns only, chronological, with timestamps.
     case historyData(id: String, turns: [HistoryTurn])
+    /// ADDITIVE (daemon→Face): the live `/override` state for the status pill + countdown. Mirrors
+    /// OverrideStateSchema. `active:false` → no override (scope/expiresAt meaningless). `expiresAt`
+    /// is a millisecond epoch the Face counts down to. NEVER reflects a Red bypass.
+    case overrideState(active: Bool, scope: String?, expiresAt: Double?)
+    /// ADDITIVE (Face→daemon): update the owner safety posture. Mirrors SettingsUpdateSchema. Every
+    /// field optional (one toggle at a time): breaker on/off, daily spend ceiling, /override TTL.
+    case settingsUpdate(breakerEnabled: Bool?, dailySpendCeiling: Double?, defaultTtlMs: Int?)
+    /// ADDITIVE (daemon→Face): the current owner safety posture for the Settings page. Mirrors
+    /// SettingsStateSchema. Broadcast on connect + after a settings.update.
+    case settingsState(breakerEnabled: Bool, dailySpendCeiling: Double, defaultTtlMs: Int)
+    /// ADDITIVE (Face→daemon): request the recent audit log for the Activity view. Mirrors
+    /// AuditQuerySchema. `limit` caps how many recent entries to return.
+    case auditQuery(id: String, limit: Int?)
+    /// ADDITIVE (daemon→Face): the recent audit entries answering an `audit.query` (same `id`).
+    /// Mirrors AuditDataSchema. Safe projection only (tool/outcome/ts).
+    case auditData(id: String, entries: [AuditEntry])
 
     /// The Settings brain toggle enum (mirrors SettingsSchema.brain).
     enum Brain: String, Codable { case cloud, local }
@@ -174,6 +199,10 @@ enum Frame: Codable, Equatable {
         case command
         case tool, op, status, detail
         case limit, turns
+        // Control-surface additive arms (SAFE-08).
+        case scope, expiresAt
+        case breakerEnabled, dailySpendCeiling, defaultTtlMs
+        case entries
     }
 
     // MARK: Decode (narrow by `type`, exactly like the zod discriminated union)
@@ -251,6 +280,29 @@ enum Frame: Codable, Equatable {
             self = .historyData(
                 id: try c.decode(String.self, forKey: .id),
                 turns: try c.decode([HistoryTurn].self, forKey: .turns))
+        case "override.state":
+            self = .overrideState(
+                active: try c.decode(Bool.self, forKey: .active),
+                scope: try c.decodeIfPresent(String.self, forKey: .scope),
+                expiresAt: try c.decodeIfPresent(Double.self, forKey: .expiresAt))
+        case "settings.update":
+            self = .settingsUpdate(
+                breakerEnabled: try c.decodeIfPresent(Bool.self, forKey: .breakerEnabled),
+                dailySpendCeiling: try c.decodeIfPresent(Double.self, forKey: .dailySpendCeiling),
+                defaultTtlMs: try c.decodeIfPresent(Int.self, forKey: .defaultTtlMs))
+        case "settings.state":
+            self = .settingsState(
+                breakerEnabled: try c.decode(Bool.self, forKey: .breakerEnabled),
+                dailySpendCeiling: try c.decode(Double.self, forKey: .dailySpendCeiling),
+                defaultTtlMs: try c.decode(Int.self, forKey: .defaultTtlMs))
+        case "audit.query":
+            self = .auditQuery(
+                id: try c.decode(String.self, forKey: .id),
+                limit: try c.decodeIfPresent(Int.self, forKey: .limit))
+        case "audit.data":
+            self = .auditData(
+                id: try c.decode(String.self, forKey: .id),
+                entries: try c.decode([AuditEntry].self, forKey: .entries))
         case "breaker.preview":
             self = .breakerPreview(
                 id: try c.decode(String.self, forKey: .id),
@@ -373,6 +425,29 @@ enum Frame: Codable, Equatable {
             try c.encode("history.data", forKey: .type)
             try c.encode(id, forKey: .id)
             try c.encode(turns, forKey: .turns)
+        case .overrideState(let active, let scope, let expiresAt):
+            try c.encode("override.state", forKey: .type)
+            try c.encode(active, forKey: .active)
+            try c.encodeIfPresent(scope, forKey: .scope)
+            try c.encodeIfPresent(expiresAt, forKey: .expiresAt)
+        case .settingsUpdate(let breakerEnabled, let dailySpendCeiling, let defaultTtlMs):
+            try c.encode("settings.update", forKey: .type)
+            try c.encodeIfPresent(breakerEnabled, forKey: .breakerEnabled)
+            try c.encodeIfPresent(dailySpendCeiling, forKey: .dailySpendCeiling)
+            try c.encodeIfPresent(defaultTtlMs, forKey: .defaultTtlMs)
+        case .settingsState(let breakerEnabled, let dailySpendCeiling, let defaultTtlMs):
+            try c.encode("settings.state", forKey: .type)
+            try c.encode(breakerEnabled, forKey: .breakerEnabled)
+            try c.encode(dailySpendCeiling, forKey: .dailySpendCeiling)
+            try c.encode(defaultTtlMs, forKey: .defaultTtlMs)
+        case .auditQuery(let id, let limit):
+            try c.encode("audit.query", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encodeIfPresent(limit, forKey: .limit)
+        case .auditData(let id, let entries):
+            try c.encode("audit.data", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(entries, forKey: .entries)
         case .breakerPreview(let id, let summary, let estimatedSpend, let tier):
             try c.encode("breaker.preview", forKey: .type)
             try c.encode(id, forKey: .id)

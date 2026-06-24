@@ -216,6 +216,27 @@ final class AppCoordinator: ObservableObject {
         Frame.Brain(rawValue: UserDefaults.standard.string(forKey: brainDefaultsKey) ?? "") ?? .local
     }
 
+    // MARK: Control surface (SAFE-08) — owner safety posture, /override state, audit activity
+
+    /// The owner-configurable safety posture, mirrored from the daemon's `settings.state` (the
+    /// daemon is the source of truth — these defaults hold only until the first frame arrives).
+    struct SafetyPosture: Equatable {
+        var breakerEnabled = false
+        var dailySpendCeiling: Double = 0
+        var defaultTtlMs = 600_000
+    }
+
+    /// The live owner safety posture (Settings page toggles). Updated by `settings.state` frames.
+    @Published private(set) var safety = SafetyPosture()
+
+    /// Whether a `/override` is currently active (the status pill), mirrored from `override.state`.
+    @Published private(set) var overrideActive = false
+    /// When the active override expires (for the countdown); nil when inactive.
+    @Published private(set) var overrideExpiresAt: Date?
+
+    /// The recent audit entries for the Activity view, answering an `audit.query`.
+    @Published private(set) var auditEntries: [AuditEntry] = []
+
     init() {
         self.speaker = Speaker(stage: stage)
         self.mic = MicEngine(cloud: cloud)
@@ -296,6 +317,7 @@ final class AppCoordinator: ObservableObject {
         case .ready(let daemon, let version):
             log.info("daemon ready: \(daemon, privacy: .public) v\(version, privacy: .public)")
             requestHistory()   // pull the persisted transcript so the Chat page shows past conversations
+            requestAudit()     // pull the recent audit log so the Activity view is populated on connect
         case .speak(let id, let text, let frameCues, let onFinish):
             _ = id
             isAwaitingReply = false   // the reply has arrived; isSpeaking will take over the mode
@@ -346,6 +368,19 @@ final class AppCoordinator: ObservableObject {
                 ConversationLine(id: -(idx + 1), role: t.role == "user" ? .you : .kernel, text: t.text)
             }
             log.info("history: loaded \(turns.count, privacy: .public) persisted turns")
+        case .overrideState(let active, _, let expiresAt):
+            // SAFE-08: the live /override state for the status pill + countdown. expiresAt is a ms epoch.
+            overrideActive = active
+            overrideExpiresAt = (active && expiresAt != nil) ? Date(timeIntervalSince1970: expiresAt! / 1000) : nil
+        case .settingsState(let breakerEnabled, let dailySpendCeiling, let defaultTtlMs):
+            // SAFE-08: the owner safety posture (Settings toggles). The daemon is the source of truth.
+            safety = SafetyPosture(
+                breakerEnabled: breakerEnabled,
+                dailySpendCeiling: dailySpendCeiling,
+                defaultTtlMs: defaultTtlMs)
+        case .auditData(_, let entries):
+            // SAFE-08: the recent audit entries (Activity view). Safe projection only (tool/outcome/ts).
+            auditEntries = entries
         case .error(_, let message):
             log.error("daemon error: \(message, privacy: .public)")
         default:
@@ -502,6 +537,40 @@ final class AppCoordinator: ObservableObject {
     func requestHistory() {
         guard !Self.isUnderXCTest else { return }
         socket.send(.historyRequest(id: "hist-\(String(UUID().uuidString.prefix(8)))", limit: 200))
+    }
+
+    // MARK: Control surface (SAFE-08) — owner-driven safety posture, /override, audit refresh
+
+    /// Ask the daemon for the recent audit log. The reply arrives as `audit.data` and seeds the
+    /// Activity view. Called on `.ready` and when the Settings page refreshes.
+    func requestAudit() {
+        guard !Self.isUnderXCTest else { return }
+        socket.send(.auditQuery(id: "audit-\(String(UUID().uuidString.prefix(8)))", limit: 200))
+    }
+
+    /// Send a safety-posture update (one or more fields). The daemon persists it and broadcasts the
+    /// new `settings.state`, which updates `safety`. Enabling the breaker only makes Red REACHABLE —
+    /// the dry-run preview + 10s cancel + ceiling + audit still gate every Red action.
+    func updateSafety(breakerEnabled: Bool? = nil, dailySpendCeiling: Double? = nil, defaultTtlMs: Int? = nil) {
+        // Optimistic local update so the toggle feels instant; the daemon's echo confirms it.
+        if let b = breakerEnabled { safety.breakerEnabled = b }
+        if let c = dailySpendCeiling { safety.dailySpendCeiling = max(0, c) }
+        if let t = defaultTtlMs { safety.defaultTtlMs = t }
+        guard !Self.isUnderXCTest else { return }
+        socket.send(.settingsUpdate(breakerEnabled: breakerEnabled, dailySpendCeiling: dailySpendCeiling, defaultTtlMs: defaultTtlMs))
+    }
+
+    /// Activate `/override` (Green full-speed, Yellow proceed+notify) for `ttlMs`, or the owner's
+    /// persisted default when omitted. NEVER unlocks Red. The daemon broadcasts the new override.state.
+    func activateOverride(ttlMs: Int? = nil) {
+        guard !Self.isUnderXCTest else { return }
+        socket.send(.override(active: true, ttlMs: ttlMs ?? safety.defaultTtlMs))
+    }
+
+    /// Deactivate `/override` immediately.
+    func deactivateOverride() {
+        guard !Self.isUnderXCTest else { return }
+        socket.send(.override(active: false, ttlMs: nil))
     }
 
     // MARK: Owner input (message bar + control dock)
