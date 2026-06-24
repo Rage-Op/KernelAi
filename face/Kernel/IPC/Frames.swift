@@ -174,6 +174,12 @@ enum Frame: Codable, Equatable {
     /// ADDITIVE (daemon→Face): the recent audit entries answering an `audit.query` (same `id`).
     /// Mirrors AuditDataSchema. Safe projection only (tool/outcome/ts).
     case auditData(id: String, entries: [AuditEntry])
+    /// ADDITIVE (daemon→Face): model warm-up readiness (BRAIN-07) — the boot gate. Mirrors
+    /// ModelStateSchema. The Face holds its boot screen until `.ready`; `.error` shows `detail`.
+    case modelState(status: ModelLoadStatus, brain: Brain, model: String?, detail: String?)
+
+    /// The model warm-up status (mirrors ModelStateSchema.status).
+    enum ModelLoadStatus: String, Codable { case loading, ready, error }
 
     /// The Settings brain toggle enum (mirrors SettingsSchema.brain).
     enum Brain: String, Codable { case cloud, local }
@@ -303,6 +309,12 @@ enum Frame: Codable, Equatable {
             self = .auditData(
                 id: try c.decode(String.self, forKey: .id),
                 entries: try c.decode([AuditEntry].self, forKey: .entries))
+        case "model.state":
+            self = .modelState(
+                status: try c.decode(ModelLoadStatus.self, forKey: .status),
+                brain: try c.decode(Brain.self, forKey: .brain),
+                model: try c.decodeIfPresent(String.self, forKey: .model),
+                detail: try c.decodeIfPresent(String.self, forKey: .detail))
         case "breaker.preview":
             self = .breakerPreview(
                 id: try c.decode(String.self, forKey: .id),
@@ -448,6 +460,12 @@ enum Frame: Codable, Equatable {
             try c.encode("audit.data", forKey: .type)
             try c.encode(id, forKey: .id)
             try c.encode(entries, forKey: .entries)
+        case .modelState(let status, let brain, let model, let detail):
+            try c.encode("model.state", forKey: .type)
+            try c.encode(status, forKey: .status)
+            try c.encode(brain, forKey: .brain)
+            try c.encodeIfPresent(model, forKey: .model)
+            try c.encodeIfPresent(detail, forKey: .detail)
         case .breakerPreview(let id, let summary, let estimatedSpend, let tier):
             try c.encode("breaker.preview", forKey: .type)
             try c.encode(id, forKey: .id)

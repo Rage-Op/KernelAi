@@ -235,6 +235,31 @@ final class FrameCodecTests: XCTestCase {
         XCTAssertEqual(d, FrameCodec.decode(line: try FrameCodec.encodeLine(d!)), "audit.data round-trips")
     }
 
+    func testModelStateFrameDecodesAndRoundTrips() throws {
+        // loading (local, with model + detail)
+        let loading = FrameCodec.decode(line: "{\"type\":\"model.state\",\"status\":\"loading\",\"brain\":\"local\",\"model\":\"qwen3.5:9b\",\"detail\":\"Loading qwen3.5:9b…\"}")
+        guard case let .modelState(status, brain, model, detail) = loading else {
+            return XCTFail("expected .modelState, got \(String(describing: loading))")
+        }
+        XCTAssertEqual(status, .loading)
+        XCTAssertEqual(brain, .local)
+        XCTAssertEqual(model, "qwen3.5:9b")
+        XCTAssertEqual(detail, "Loading qwen3.5:9b…")
+        XCTAssertEqual(loading, FrameCodec.decode(line: try FrameCodec.encodeLine(loading!)), "model.state round-trips")
+
+        // ready (cloud, no model/detail)
+        let ready = FrameCodec.decode(line: "{\"type\":\"model.state\",\"status\":\"ready\",\"brain\":\"cloud\"}")
+        guard case let .modelState(rstatus, rbrain, rmodel, _) = ready else {
+            return XCTFail("expected ready .modelState")
+        }
+        XCTAssertEqual(rstatus, .ready)
+        XCTAssertEqual(rbrain, .cloud)
+        XCTAssertNil(rmodel)
+
+        // an out-of-enum status → nil (no crash).
+        XCTAssertNil(FrameCodec.decode(line: "{\"type\":\"model.state\",\"status\":\"warming\",\"brain\":\"local\"}"))
+    }
+
     // MARK: malformed tolerated (T-03-13)
 
     func testMalformedLineDoesNotCrashDecoder() {

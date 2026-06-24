@@ -237,6 +237,18 @@ final class AppCoordinator: ObservableObject {
     /// The recent audit entries for the Activity view, answering an `audit.query`.
     @Published private(set) var auditEntries: [AuditEntry] = []
 
+    // MARK: Model readiness (BRAIN-07) — the boot gate
+
+    /// The active model's warm-up status, mirrored from `model.state`. The boot screen holds until
+    /// `.ready` (or the fail-safe reveal), so the owner's first prompt is never a cold start.
+    @Published private(set) var modelStatus: Frame.ModelLoadStatus = .loading
+    /// A short human-readable progress/error line for the boot screen (from `model.state.detail`).
+    @Published private(set) var modelDetail: String = "Starting…"
+    /// The active model tag (local brain), for the boot screen ("qwen3.5:9b").
+    @Published private(set) var modelName: String?
+    /// True once the model is loaded and ready to take a prompt — the boot→home gate.
+    var modelReady: Bool { modelStatus == .ready }
+
     init() {
         self.speaker = Speaker(stage: stage)
         self.mic = MicEngine(cloud: cloud)
@@ -381,6 +393,11 @@ final class AppCoordinator: ObservableObject {
         case .auditData(_, let entries):
             // SAFE-08: the recent audit entries (Activity view). Safe projection only (tool/outcome/ts).
             auditEntries = entries
+        case .modelState(let status, _, let model, let detail):
+            // BRAIN-07: model warm-up readiness — the boot gate. The boot screen advances on .ready.
+            modelStatus = status
+            if let model { modelName = model }
+            if let detail { modelDetail = detail }
         case .error(_, let message):
             log.error("daemon error: \(message, privacy: .public)")
         default:
@@ -571,6 +588,15 @@ final class AppCoordinator: ObservableObject {
     func deactivateOverride() {
         guard !Self.isUnderXCTest else { return }
         socket.send(.override(active: false, ttlMs: nil))
+    }
+
+    /// Retry model warm-up after an error (the boot screen's Retry). Re-sends the current brain, which
+    /// makes the daemon re-run `warmupActiveBrain` (e.g. after you start Ollama / pull the model).
+    func retryModelLoad() {
+        modelStatus = .loading
+        modelDetail = "Retrying…"
+        guard !Self.isUnderXCTest else { return }
+        socket.send(.settings(brain: brain))
     }
 
     // MARK: Owner input (message bar + control dock)

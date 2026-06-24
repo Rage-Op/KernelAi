@@ -10,15 +10,17 @@ import SwiftUI
 struct RuntimeWindow: View {
     @ObservedObject var coordinator: AppCoordinator
 
-    /// True once we've revealed the live stage — either the daemon introduced itself, or a brief
-    /// boot-intro grace period elapsed. This keeps the app demoable WITHOUT a running daemon (the
-    /// boot screen otherwise waits forever for `capabilities`).
+    /// True once we've revealed the live stage. Normally this flips when the MODEL is ready
+    /// (BRAIN-07) — so the owner's first prompt is never a cold start. It can also be forced by the
+    /// boot screen's "Continue anyway" or a long fail-safe timeout, so the app is never stuck on boot
+    /// (plug-and-play: a dead/headless daemon still lets you in).
     @State private var revealed = false
     /// Guards the one-shot reveal timer so re-renders don't schedule it repeatedly.
     @State private var didScheduleReveal = false
 
-    /// Show the boot/runtime-status screen until the daemon connects OR the intro grace elapses.
-    private var showBoot: Bool { !revealed && coordinator.capabilities == nil }
+    /// Hold the boot/runtime-status screen until the model is loaded and READY (or a manual/fail-safe
+    /// reveal). Gating on `modelReady` (not just `capabilities`) is the "wait for the model" behavior.
+    private var showBoot: Bool { !revealed && !coordinator.modelReady }
     /// Full chrome only on the main stage (not boot, not the corner pill).
     private var showChrome: Bool { !showBoot && coordinator.scene != .cornerPill }
 
@@ -49,7 +51,7 @@ struct RuntimeWindow: View {
             Tokens.canvas.ignoresSafeArea()
 
             if showBoot {
-                BootScreen(coordinator: coordinator)
+                BootScreen(coordinator: coordinator, onContinue: { revealed = true })
                     .transition(.opacity)
             } else {
                 CloudWindow(coordinator: coordinator, bottomInset: showChrome ? chromeInset : 0)
@@ -89,9 +91,11 @@ struct RuntimeWindow: View {
         .onAppear {
             guard !didScheduleReveal else { return }
             didScheduleReveal = true
-            // Brief boot intro, then reveal the stage even if the daemon never connects (so the Face
-            // is demoable standalone). A guarded asyncAfter (not `.task`) survives view re-renders.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { revealed = true }
+            // FAIL-SAFE last resort: reveal the stage after a long grace even if the model never
+            // reports ready (dead/headless daemon, Ollama down) — the app is never trapped on boot.
+            // The normal path reveals far sooner via `modelReady`; the boot screen also offers an
+            // explicit "Continue anyway". A guarded asyncAfter survives view re-renders.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) { revealed = true }
         }
     }
 
