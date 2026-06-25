@@ -30,6 +30,40 @@ test('protocol: an unknown type is rejected', () => {
   assert.equal(r.success, false);
 });
 
+test('protocol: reasoning frame round-trips (additive, daemon→Face live chain-of-thought)', () => {
+  assert.equal(
+    FrameSchema.safeParse({ type: 'reasoning', id: 'a1', delta: 'Let me work it out.', final: false }).success,
+    true,
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'reasoning', id: 'a1', delta: '', final: true }).success,
+    true,
+    'the terminal frame carries an empty delta',
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'reasoning', id: 'a1', delta: 'x' }).success,
+    false,
+    'final is required',
+  );
+});
+
+test('protocol: progress frame round-trips (additive, daemon→Face determinate prefill bar)', () => {
+  assert.equal(
+    FrameSchema.safeParse({ type: 'progress', id: 'a1', etaMs: 1500, label: 'Processing prompt…' }).success,
+    true,
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'progress', id: 'a1', etaMs: 1500 }).success,
+    true,
+    'label is optional',
+  );
+  assert.equal(
+    FrameSchema.safeParse({ type: 'progress', id: 'a1' }).success,
+    false,
+    'etaMs is required',
+  );
+});
+
 test('protocol: tool.activity frame round-trips (additive, daemon→Face background tool use)', () => {
   assert.equal(
     FrameSchema.safeParse({ type: 'tool.activity', id: 'a1', tool: 'web', op: 'search', status: 'start', detail: 'apple news' }).success,
@@ -267,4 +301,34 @@ test('protocol: a speak frame carrying cues[] + onFinish round-trips (the frozen
     onFinish: [{ action: 'stage.dismiss', widget: 'accounts' }],
   });
   assert.equal(r.success, true, 'speak with cues[] + onFinish must round-trip');
+});
+
+test('protocol: the web browser-view frames round-trip (additive: browser.frame / browser.state / browser.view)', () => {
+  // daemon→web screencast frame
+  assert.equal(
+    FrameSchema.safeParse({ type: 'browser.frame', dataB64: 'AAAA', url: 'http://x', width: 1280, height: 800 }).success,
+    true,
+  );
+  // daemon→web high-level state (url optional)
+  assert.equal(FrameSchema.safeParse({ type: 'browser.state', active: true, url: 'http://x' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'browser.state', active: false }).success, true);
+  // web→daemon subscribe/unsubscribe
+  assert.equal(FrameSchema.safeParse({ type: 'browser.view', streaming: true }).success, true);
+  // malformed: a non-string dataB64 is rejected
+  assert.equal(FrameSchema.safeParse({ type: 'browser.frame', dataB64: 123, url: 'x', width: 1, height: 1 }).success, false);
+  // malformed: browser.view requires streaming:boolean
+  assert.equal(FrameSchema.safeParse({ type: 'browser.view' }).success, false);
+});
+
+test('protocol: the background-service frames round-trip (additive: service.list / service.action / service.data)', () => {
+  assert.equal(FrameSchema.safeParse({ type: 'service.list', id: 'svc' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'service.action', id: 'svc', name: 'ollama', action: 'stop' }).success, true);
+  assert.equal(
+    FrameSchema.safeParse({ type: 'service.data', id: 'svc', services: [{ name: 'ollama', label: 'Ollama', running: true, pid: 42, detail: ':11434', actions: ['stop'] }] }).success,
+    true,
+  );
+  // malformed: action must be the stop/restart enum
+  assert.equal(FrameSchema.safeParse({ type: 'service.action', id: 'svc', name: 'ollama', action: 'nuke' }).success, false);
+  // malformed: a service entry missing `actions`
+  assert.equal(FrameSchema.safeParse({ type: 'service.data', services: [{ name: 'x', label: 'x', running: false }] }).success, false);
 });

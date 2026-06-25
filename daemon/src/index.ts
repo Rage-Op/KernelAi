@@ -17,7 +17,16 @@ import { config } from './config.js';
 import { logger } from './memory/log.js';
 import { bootBuildStamp } from './build-stamp.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
-import { startIpcServer, probeDaemonAlive } from './ipc/server.js';
+import {
+  startIpcServer,
+  probeDaemonAlive,
+  broadcastBrowser,
+  anyBrowserViewers,
+  setBrowserViewSync,
+} from './ipc/server.js';
+import { startWebServer } from './web/http-server.js';
+import { configureBrowserView, syncScreencast } from './tools/browser-view.js';
+import { acquireSingleInstanceLock, lockPath } from './ipc/single-instance-lock.js';
 import { applySettings, loadPersistedBrain, currentBrainSelection } from './settings.js';
 import { restoreOwnerConfig } from './safety/owner-config.js';
 import { warmupActiveBrain } from './brain/readiness.js';
@@ -84,21 +93,42 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
   runStartupGuards();
 
-  // SINGLE-INSTANCE GUARD: if a daemon is already listening on the socket (e.g. the launchd job),
-  // do NOT start a second one. `startIpc` unlinks the stale socket before binding, which would
-  // otherwise STEAL the socket from the running daemon and leave two daemons fighting over it — the
-  // root cause of "the Face talks to the wrong (env-less) daemon" (no Tavily key → no internet).
+  // SINGLE-INSTANCE GUARD — two layers, because the socket alone is not enough:
+  //
+  // (1) PID LOCK (authoritative). A daemon can be ALIVE yet UNREACHABLE — its socket file was
+  //     unlink()ed while it still holds the bound fd, so a connect-probe wrongly reports "no daemon"
+  //     and a 2nd/3rd daemon starts and clobbers the socket (the "Face gets no output" bug). The PID
+  //     lock catches a live daemon REGARDLESS of socket state: if another live pid holds the lock we
+  //     exit; a stale lock (dead pid, e.g. after kill -9) is stolen and we take over.
+  const lock = acquireSingleInstanceLock();
+  if (!lock.acquired) {
+    logger.warn(
+      { heldByPid: lock.heldByPid, lockPath: lockPath() },
+      'another KERNEL daemon already holds the single-instance lock — exiting (PID guard)',
+    );
+    process.exit(0);
+  }
+  // (2) SOCKET PROBE (secondary). Covers a legacy/other daemon that predates the PID lock and is
+  //     still listening; `startIpc` would otherwise unlink-and-steal its socket.
   if (await probeDaemonAlive(config.socketPath)) {
     logger.warn(
       { socketPath: config.socketPath },
       'another KERNEL daemon is already listening — exiting (single-instance guard)',
     );
-    process.exit(0);
+    process.exit(0); // releases our just-acquired lock via the registered exit handler
   }
 
   // Register the built-in tools (HANDS-04) so the brain can dispatch them and the capabilities
   // frame reports them. Resilient: a tool whose module fails to load is skipped, not fatal.
   await registerBuiltinTools();
+  // Wire the live browser screencast (web Face's "watch the browser" pane) to the IPC layer: it pushes
+  // frames only to web viewers (broadcastBrowser), checks who's watching (anyBrowserViewers), and the
+  // server triggers syncScreencast whenever the viewer set changes. Injected here so browser-view never
+  // imports the server (no cycle) and the screencast runs only while a pane is open.
+  configureBrowserView({ broadcast: broadcastBrowser, hasViewers: anyBrowserViewers });
+  setBrowserViewSync(() => {
+    void syncScreencast();
+  });
   // Choose the active brain. A persisted owner choice wins; otherwise default to the LOCAL brain
   // (qwen3.5 via Ollama) so a never-toggled owner gets a real, offline-capable, tool-using brain
   // out of the box — NOT the StubBrain placeholder or a keyless cloud brain (the "it's dumb /
@@ -113,6 +143,25 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // restored. Best-effort; an absent/empty log just starts fresh.
   conversation.load();
   const ipc = await startIpcServer();
+  // Start the daemon-hosted WEB Face transport (HTTP + SSE on 127.0.0.1). Speaks the SAME frame contract
+  // as the UDS Face, so the gate/loop/tools are preserved. Best-effort: a bind failure (port in use) is
+  // logged but does NOT take the daemon down — the UDS Face still works. The launcher URL (with the
+  // single-use-ish token) is logged so `kernel up` can surface it to the owner.
+  let web: Awaited<ReturnType<typeof startWebServer>> | null = null;
+  try {
+    web = await startWebServer();
+    // SECURITY: never log web.url — it embeds the secret token, and this line is captured into
+    // daemon.out.log (a 0644 file). Log only the token-less address; the token lives in its 0600 file.
+    logger.info(
+      { addr: `http://127.0.0.1:${web.port}` },
+      'KERNEL web face online — run `./kernel-up.sh` (or read the web-token file) to open it',
+    );
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      'web face failed to start (UDS Face unaffected)',
+    );
+  }
   // Log exactly which build is live (MAINT-04) — so "am I running stale code?" is answerable from
   // the logs, and the connection-time staleness check has a baseline to compare against.
   logger.info(
@@ -129,7 +178,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // Keep the process resident; gracefully close the socket on termination signals.
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'KERNEL daemon shutting down');
-    void ipc.close().finally(() => process.exit(0));
+    const closeWeb = web ? web.close().catch(() => {}) : Promise.resolve();
+    void Promise.all([ipc.close().catch(() => {}), closeWeb]).finally(() => process.exit(0));
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));

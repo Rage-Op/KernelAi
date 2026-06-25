@@ -9,9 +9,13 @@
  * `usage reset` zeroes the accounting window. Pure read otherwise (no memory writes).
  */
 import { resetUsage, snapshot } from './session-usage.js';
+import { OLLAMA_NUM_CTX } from '../brain/LocalBrain.js';
 import { bar, commas, ms, since, usd } from './format.js';
 
 const SEP = '\n';
+/** The local context window used for the last-turn fill bar — the real Ollama num_ctx (a generic
+ *  local default; LM Studio's true window depends on how the model was loaded). */
+const LOCAL_CTX_WINDOW = OLLAMA_NUM_CTX;
 
 /** Build the session usage report. `arg === 'reset'` clears the window first. */
 export function runUsageReport(arg = ''): string {
@@ -31,7 +35,13 @@ export function runUsageReport(arg = ''): string {
     ].join(SEP);
   }
 
-  const brainLabel = s.lastBrain ? (s.lastBrain === 'local' ? 'local (free)' : 'cloud') : '—';
+  const brainLabel = s.lastBrain
+    ? s.lastBrain === 'cloud'
+      ? 'cloud'
+      : s.lastBrain === 'lmstudio'
+        ? 'lmstudio (free)'
+        : 'local (free)'
+    : '—';
   const costLine =
     s.lastBrain === 'cloud'
       ? `${usd(s.costUsd)} billed`
@@ -51,9 +61,10 @@ export function runUsageReport(arg = ''): string {
   }
   lines.push(`  cost       ${costLine}`);
 
-  // A coarse model-window fill from the last turn (local 8K context is the binding budget).
-  if (s.lastBrain === 'local' && typeof s.lastPromptTokens === 'number') {
-    lines.push(`  last ctx   ${commas(s.lastPromptTokens)} prompt tok  ${bar(s.lastPromptTokens, 8192, 14)} of 8K window`);
+  // A coarse model-window fill from the last turn (local context is the binding budget). Both local
+  // engines (Ollama + LM Studio) get it; cloud's 1M window makes a fill bar meaningless.
+  if (s.lastBrain !== undefined && s.lastBrain !== 'cloud' && typeof s.lastPromptTokens === 'number') {
+    lines.push(`  last ctx   ${commas(s.lastPromptTokens)} prompt tok  ${bar(s.lastPromptTokens, LOCAL_CTX_WINDOW, 14)} of ${Math.round(LOCAL_CTX_WINDOW / 1024)}K window`);
   }
 
   return lines.join(SEP);

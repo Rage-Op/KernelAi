@@ -25,6 +25,7 @@ import { getActiveBrain, setBrain } from './loop.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { ClaudeBrain } from './brain/ClaudeBrain.js';
 import { LocalBrain } from './brain/LocalBrain.js';
+import { LMStudioBrain } from './brain/LMStudioBrain.js';
 import * as helper from './brain/helper.js';
 
 let tmpDir: string;
@@ -55,6 +56,19 @@ test('applySettings("local") swaps the active brain to a LocalBrain', () => {
 test('applySettings("cloud") swaps the active brain to a ClaudeBrain', () => {
   applySettings('cloud');
   assert.ok(getActiveBrain() instanceof ClaudeBrain, 'brain=cloud → ClaudeBrain is active');
+});
+
+test('applySettings("lmstudio") swaps the active brain to an LMStudioBrain', () => {
+  applySettings('lmstudio');
+  assert.ok(getActiveBrain() instanceof LMStudioBrain, 'brain=lmstudio → LMStudioBrain is active');
+});
+
+test('lmstudio selection persists + restores on startup', () => {
+  applySettings('lmstudio');
+  assert.equal(loadPersistedBrain(), 'lmstudio', 'lmstudio is persisted');
+  setBrain(new StubBrain());
+  restorePersistedBrain();
+  assert.ok(getActiveBrain() instanceof LMStudioBrain, 'startup restore → LMStudioBrain active');
 });
 
 test('the 7B helper is a standalone module, unaffected by the brain toggle', () => {

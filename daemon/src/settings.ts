@@ -20,11 +20,13 @@ import path from 'node:path';
 import { setBrain } from './loop.js';
 import { ClaudeBrain } from './brain/ClaudeBrain.js';
 import { LocalBrain } from './brain/LocalBrain.js';
+import { LMStudioBrain } from './brain/LMStudioBrain.js';
 import { config } from './config.js';
 import { logger } from './memory/log.js';
 
-/** The brain selection surfaced by the Settings toggle. */
-export type BrainSelection = 'cloud' | 'local';
+/** The brain selection surfaced by the Settings toggle. `lmstudio` is a second LOCAL engine (LM
+ *  Studio's OpenAI-compatible server) that, unlike Ollama, can run MLX models on Apple Silicon. */
+export type BrainSelection = 'cloud' | 'local' | 'lmstudio';
 
 /** The current Settings selection. ClaudeBrain (cloud) is the default (BRAIN-02). */
 let currentBrain: BrainSelection = 'cloud';
@@ -71,7 +73,9 @@ function persistBrain(brain: BrainSelection): void {
 export function loadPersistedBrain(): BrainSelection | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(brainPrefPath(), 'utf8')) as { brain?: unknown };
-    if (parsed.brain === 'local' || parsed.brain === 'cloud') return parsed.brain;
+    if (parsed.brain === 'local' || parsed.brain === 'cloud' || parsed.brain === 'lmstudio') {
+      return parsed.brain;
+    }
   } catch {
     // absent / unreadable / corrupt → no persisted choice
   }
@@ -86,7 +90,13 @@ export function loadPersistedBrain(): BrainSelection | null {
  */
 export function applySettings(brain: BrainSelection, persist = true): void {
   currentBrain = brain;
-  setBrain(brain === 'local' ? new LocalBrain() : new ClaudeBrain());
+  setBrain(
+    brain === 'local'
+      ? new LocalBrain()
+      : brain === 'lmstudio'
+        ? new LMStudioBrain()
+        : new ClaudeBrain(),
+  );
   if (persist) persistBrain(brain);
 }
 

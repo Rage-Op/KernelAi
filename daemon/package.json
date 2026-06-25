@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc",
     "postbuild": "node scripts/write-build-stamp.mjs",
+    "build:web": "tsc -p ../webface/tsconfig.json && cp ../webface/index.html ../webface/styles.css ../webface/dist/",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "heartbeat": "node dist/index.js --heartbeat",

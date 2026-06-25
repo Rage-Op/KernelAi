@@ -75,7 +75,7 @@ export const OLLAMA_TEMPERATURE = 0.7;
  * param (WS-A4) — this prose is the policy the model applies. The assembled memory `context` is
  * prepended at call time (it stays the system message so it's the last thing truncated).
  */
-const SYSTEM_PROMPT = `You are KERNEL, Pravin's persistent personal AI agent, running locally on his Mac. You are warm, sharp, concise, and you FINISH what you start.
+export const SYSTEM_PROMPT = `You are KERNEL, Pravin's persistent personal AI agent, running locally on his Mac. You are warm, sharp, concise, and you FINISH what you start.
 
 How you reply:
 - Natural plain prose. No JSON, no preamble like "Sure, here is".
@@ -110,10 +110,10 @@ When to ACT with a tool (do it, don't ask permission, then report what happened)
  * Splitting the guidance is what lets us turn thinking ON for hard tasks WITHOUT re-introducing the
  * announce-then-stop rumination that the old global think:false was there to prevent.
  */
-const QUICK_ADDENDUM =
+export const QUICK_ADDENDUM =
   'This is a simple request — keep any reasoning brief and just give the complete answer directly, no plan needed.';
 
-const DELIBERATE_ADDENDUM = `This is a multi-step or complex request — take the time to get it RIGHT (the owner prefers a slower, correct answer over a fast shallow one). Work through it like this:
+export const DELIBERATE_ADDENDUM = `This is a multi-step or complex request — take the time to get it RIGHT (the owner prefers a slower, correct answer over a fast shallow one). Work through it like this:
 1. First, briefly lay out your PLAN as a short numbered to-do list of the steps you'll take (and which tools each step needs).
 2. Then DO every step yourself — call tools to gather what you need, read their real results, and keep going until the whole task is done.
 3. Deliver the COMPLETE result in THIS reply.
@@ -124,7 +124,7 @@ Never stop after stating the plan, and never hand the work back to the owner. If
  * from what it already gathered. Without this a small model can burn every hop re-calling a tool and
  * then emit the empty fallback instead of an answer (a documented failure mode).
  */
-const FINAL_ANSWER_NUDGE =
+export const FINAL_ANSWER_NUDGE =
   'You have gathered enough information. Do NOT call any more tools — give the complete final answer NOW, using the observations above.';
 
 /**
@@ -147,7 +147,7 @@ export function assessDepth(prompt: string, _history?: ChatTurn[]): 'quick' | 'd
 
 /** A current-date/time anchor for the system context so "today"/"now"/"this month" questions resolve
  *  against the real clock instead of the model's stale training prior. */
-function todayLine(): string {
+export function todayLine(): string {
   const now = new Date();
   const date = now.toLocaleDateString('en-US', {
     weekday: 'long',
@@ -167,11 +167,12 @@ interface OllamaToolCall {
 
 /** The Ollama `/api/chat` response shape (only the fields the brain reads). Durations are ns. */
 interface OllamaChatResponse {
-  message?: { role: string; content: string; tool_calls?: OllamaToolCall[] };
+  message?: { role: string; content: string; thinking?: string; tool_calls?: OllamaToolCall[] };
   model?: string;
   done?: boolean;
   error?: string;
   prompt_eval_count?: number; // input tokens evaluated
+  prompt_eval_duration?: number; // prefill duration (ns) — basis for the progress estimate
   eval_count?: number; // output tokens generated
   eval_duration?: number; // generation duration (ns) — basis for tokens/sec
   load_duration?: number; // model load duration (ns)
@@ -188,6 +189,7 @@ function usageFrom(body: OllamaChatResponse | null): BrainUsage {
   return {
     model: body?.model ?? OLLAMA_MODEL,
     promptTokens: body?.prompt_eval_count,
+    promptEvalMs: nsToMs(body?.prompt_eval_duration),
     outputTokens: body?.eval_count,
     evalMs: nsToMs(body?.eval_duration),
     loadMs: nsToMs(body?.load_duration),
@@ -205,8 +207,8 @@ interface OllamaMessage {
 
 /** Max tool hops before forcing a final answer — a loop guard (small models can loop on tools).
  *  Deliberate tasks get more headroom to gather evidence across several steps before answering. */
-const MAX_TOOL_HOPS = 4;
-const MAX_TOOL_HOPS_DELIBERATE = 6;
+export const MAX_TOOL_HOPS = 4;
+export const MAX_TOOL_HOPS_DELIBERATE = 6;
 
 /** The gated tool dispatcher (default routes through registry.dispatch so the gate stays in the
  *  path). A test seam swaps it so the tool loop runs without the real registry/network. */
@@ -226,7 +228,7 @@ function defaultDispatch(call: ToolCall): Promise<ToolResult> {
 }
 
 /** Coerce Ollama tool-call arguments (object, or occasionally a JSON string) into a safe record. */
-function normalizeArgs(raw: unknown): Record<string, unknown> {
+export function normalizeArgs(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
   if (typeof raw === 'string') {
     try {
@@ -259,6 +261,7 @@ export class LocalBrain implements BrainProvider {
     onToken?: (chunk: string) => void,
     history?: ChatTurn[],
     onToolActivity?: (event: ToolActivityEvent) => void,
+    onThinking?: (chunk: string, final: boolean) => void,
   ): Promise<Decision> {
     // Pick the reasoning gear for this turn (WS-A3). Quick = snappy chat; deliberate = think + plan.
     const depth = assessDepth(prompt, history);
@@ -273,7 +276,7 @@ export class LocalBrain implements BrainProvider {
       { role: 'user', content: prompt },
     ];
     const maxHops = deliberate ? MAX_TOOL_HOPS_DELIBERATE : MAX_TOOL_HOPS;
-    return this.runToolLoop(messages, onToken, 0, false, onToolActivity, { deliberate, maxHops });
+    return this.runToolLoop(messages, onToken, 0, false, onToolActivity, { deliberate, maxHops }, onThinking);
   }
 
   /**
@@ -289,6 +292,7 @@ export class LocalBrain implements BrainProvider {
     usedTool: boolean,
     onToolActivity: ((event: ToolActivityEvent) => void) | undefined,
     opts: { deliberate: boolean; maxHops: number },
+    onThinking?: (chunk: string, final: boolean) => void,
   ): Promise<Decision> {
     // On the final hop (tool budget exhausted) force a real answer: drop the tools and nudge the model
     // to answer from the observations it already has, so it can't burn out re-calling tools then stall.
@@ -299,7 +303,7 @@ export class LocalBrain implements BrainProvider {
     const result = await this.chat(messages, onToken, {
       deliberate: opts.deliberate,
       toolsAllowed: !finalHop,
-    });
+    }, onThinking);
     if (!result.ok) return result.decision;
     const { text, toolCalls, usage } = result;
 
@@ -323,7 +327,7 @@ export class LocalBrain implements BrainProvider {
           ),
         });
       }
-      return this.runToolLoop(messages, onToken, depth + 1, true, onToolActivity, opts);
+      return this.runToolLoop(messages, onToken, depth + 1, true, onToolActivity, opts, onThinking);
     }
 
     let reply = text.trim();
@@ -333,7 +337,7 @@ export class LocalBrain implements BrainProvider {
     // sometimes stops after the observation without narrating the result). Bounded: one extra hop.
     if (!reply && usedTool && !finalHop) {
       messages.push({ role: 'user', content: FINAL_ANSWER_NUDGE });
-      const forced = await this.chat(messages, onToken, { deliberate: opts.deliberate, toolsAllowed: false });
+      const forced = await this.chat(messages, onToken, { deliberate: opts.deliberate, toolsAllowed: false }, onThinking);
       if (forced.ok) {
         reply = forced.text.trim();
         finalUsage = forced.usage;
@@ -355,6 +359,7 @@ export class LocalBrain implements BrainProvider {
     messages: OllamaMessage[],
     onToken?: (chunk: string) => void,
     opts?: { deliberate?: boolean; toolsAllowed?: boolean },
+    onThinking?: (chunk: string, final: boolean) => void,
   ): Promise<ChatOk | ChatErr> {
     const stream = typeof onToken === 'function';
     const deliberate = opts?.deliberate ?? false;
@@ -410,17 +415,29 @@ export class LocalBrain implements BrainProvider {
       };
     }
 
+    // Reasoning is a DELIBERATE-only signal: a quick turn runs think:false, so it must never surface a
+    // reasoning block. Make that a code invariant (not a dependency on Ollama omitting message.thinking
+    // for a non-think request) by only honoring the thinking sink on deliberate passes.
+    const thinkingSink = deliberate ? onThinking : undefined;
     const read = stream && res.body
-      ? await this.readStream(res.body, onToken!)
-      : await this.readSingle(res);
+      ? await this.readStream(res.body, onToken!, thinkingSink)
+      : await this.readSingle(res, thinkingSink);
     return { ok: true, ...read };
   }
 
-  /** Non-streamed path: one JSON response — read content + any tool_calls. */
+  /** Non-streamed path: one JSON response — read content + any tool_calls. A deliberate pass also
+   *  carries the whole `message.thinking` at once; surface it (then immediately close) so the
+   *  non-streamed callers see reasoning too. */
   private async readSingle(
     res: Response,
+    onThinking?: (chunk: string, final: boolean) => void,
   ): Promise<{ text: string; toolCalls: OllamaToolCall[]; usage: BrainUsage }> {
     const body = (await res.json().catch(() => null)) as OllamaChatResponse | null;
+    const thinking = body?.message?.thinking;
+    if (onThinking && typeof thinking === 'string' && thinking.length) {
+      onThinking(thinking, false);
+      onThinking('', true);
+    }
     return {
       text: body?.message?.content ?? '',
       toolCalls: body?.message?.tool_calls ?? [],
@@ -437,6 +454,7 @@ export class LocalBrain implements BrainProvider {
   private async readStream(
     body: ReadableStream<Uint8Array>,
     onToken: (chunk: string) => void,
+    onThinking?: (chunk: string, final: boolean) => void,
   ): Promise<{ text: string; toolCalls: OllamaToolCall[]; usage: BrainUsage }> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -444,6 +462,19 @@ export class LocalBrain implements BrainProvider {
     let full = '';
     const toolCalls: OllamaToolCall[] = [];
     let usage: BrainUsage = { model: OLLAMA_MODEL, contextWindow: OLLAMA_NUM_CTX };
+    // Track whether we're still in the model's REASONING phase. In `think:true` mode Ollama streams
+    // `message.thinking` deltas FIRST, then `message.content`; the transition (first content delta, or
+    // a tool call, or the done line) closes reasoning with a single `final:true`. `contentStarted` is a
+    // one-way latch: once the answer begins we IGNORE any further stray thinking deltas, so reasoning
+    // can be closed exactly once even if a model interleaves thinking after content.
+    let thinkingOpen = false;
+    let contentStarted = false;
+    const closeThinking = (): void => {
+      if (thinkingOpen) {
+        onThinking?.('', true);
+        thinkingOpen = false;
+      }
+    };
 
     const drainLine = (line: string): void => {
       const trimmed = line.trim();
@@ -454,13 +485,26 @@ export class LocalBrain implements BrainProvider {
       } catch {
         return; // a malformed line never breaks the stream
       }
+      const thought = obj.message?.thinking;
+      if (onThinking && !contentStarted && typeof thought === 'string' && thought.length) {
+        thinkingOpen = true;
+        onThinking(thought, false);
+      }
       const delta = obj.message?.content;
       if (typeof delta === 'string' && delta.length) {
+        contentStarted = true;
+        closeThinking(); // the answer has begun — reasoning is complete
         full += delta;
         onToken(delta);
       }
-      if (obj.message?.tool_calls?.length) toolCalls.push(...obj.message.tool_calls);
-      if (obj.done) usage = usageFrom(obj);
+      if (obj.message?.tool_calls?.length) {
+        closeThinking(); // a tool call ends this hop's reasoning
+        toolCalls.push(...obj.message.tool_calls);
+      }
+      if (obj.done) {
+        closeThinking();
+        usage = usageFrom(obj);
+      }
     };
 
     try {
@@ -478,6 +522,7 @@ export class LocalBrain implements BrainProvider {
     } catch {
       // a mid-stream read error degrades to whatever was accumulated — never throws past the loop.
     }
+    closeThinking(); // belt-and-braces: never leave reasoning visually "open" if the stream cut off
     return { text: full, toolCalls, usage };
   }
 }

@@ -250,6 +250,112 @@ test('LocalBrain: streams content deltas through onToken and concatenates the re
   restoreFetch();
 });
 
+test('LocalBrain: streams the reasoning (think:true `message.thinking`) through onThinking, closed once, separate from the answer', async () => {
+  globalThis.fetch = (async () => {
+    return {
+      ok: true,
+      status: 200,
+      // Ollama think-mode order: thinking deltas FIRST, then the content answer, then the done line.
+      body: ndjsonStream([
+        JSON.stringify({ message: { role: 'assistant', thinking: 'Let me ' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', thinking: 'work it out.' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', content: 'The answer ' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', content: 'is 42.' }, done: false }),
+        JSON.stringify({
+          message: { role: 'assistant', content: '' },
+          done: true,
+          model: OLLAMA_MODEL,
+          eval_count: 4,
+        }),
+      ]),
+      async text() {
+        return '';
+      },
+    };
+  }) as unknown as typeof fetch;
+
+  const answer: string[] = [];
+  const thoughts: string[] = [];
+  let finals = 0;
+  // A deliberate prompt so the request runs in think mode (and exercises the 6-arg reason signature).
+  const decision = await new LocalBrain().reason(
+    'analyze this step by step and figure out the answer',
+    'ctx',
+    (c) => answer.push(c),
+    [],
+    undefined,
+    (delta, final) => {
+      if (delta) thoughts.push(delta);
+      if (final) finals += 1;
+    },
+  );
+
+  assert.deepEqual(thoughts, ['Let me ', 'work it out.'], 'reasoning deltas surface via onThinking');
+  assert.equal(finals, 1, 'reasoning is closed exactly once (when the answer begins)');
+  assert.deepEqual(answer, ['The answer ', 'is 42.'], 'the answer streams via onToken, not onThinking');
+  assert.equal(decision.reply, 'The answer is 42.', 'thinking is NOT part of the spoken reply');
+
+  restoreFetch();
+});
+
+test('LocalBrain: a QUICK turn never surfaces reasoning even if a stray message.thinking arrives', async () => {
+  let body: { think?: boolean } | undefined;
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    body = init?.body ? JSON.parse(init.body) : undefined;
+    return {
+      ok: true,
+      status: 200,
+      body: ndjsonStream([
+        // A stray thinking field on a non-think request must be ignored on the quick gear.
+        JSON.stringify({ message: { role: 'assistant', thinking: 'stray', content: 'Hi.' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', content: '' }, done: true, model: OLLAMA_MODEL }),
+      ]),
+      async text() {
+        return '';
+      },
+    };
+  }) as unknown as typeof fetch;
+
+  const thoughts: string[] = [];
+  // 'hi there' is a trivial/quick prompt → think:false → the thinking sink must be suppressed.
+  await new LocalBrain().reason('hi there', 'ctx', () => {}, [], undefined, (d, _f) => { if (d) thoughts.push(d); });
+  assert.equal(body?.think, false, 'quick gear runs think:false');
+  assert.deepEqual(thoughts, [], 'a quick turn surfaces NO reasoning (sink gated on deliberate)');
+
+  restoreFetch();
+});
+
+test('LocalBrain: thinking interleaved AFTER content is ignored — reasoning still closes exactly once', async () => {
+  globalThis.fetch = (async () => {
+    return {
+      ok: true,
+      status: 200,
+      body: ndjsonStream([
+        JSON.stringify({ message: { role: 'assistant', thinking: 'first' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', content: 'Answer.' }, done: false }),
+        // A stray late thinking delta AFTER content began — must be dropped (one-way latch).
+        JSON.stringify({ message: { role: 'assistant', thinking: 'late stray' }, done: false }),
+        JSON.stringify({ message: { role: 'assistant', content: '' }, done: true, model: OLLAMA_MODEL }),
+      ]),
+      async text() {
+        return '';
+      },
+    };
+  }) as unknown as typeof fetch;
+
+  const thoughts: string[] = [];
+  let finals = 0;
+  await new LocalBrain().reason(
+    'analyze and compare these options step by step',
+    'ctx', () => {}, [], undefined,
+    (d, f) => { if (d) thoughts.push(d); if (f) finals += 1 },
+  );
+  assert.deepEqual(thoughts, ['first'], 'only pre-content thinking surfaces; the late stray is dropped');
+  assert.equal(finals, 1, 'reasoning is closed exactly once despite interleaved thinking');
+
+  restoreFetch();
+});
+
 test('LocalBrain: a rejected fetch (ECONNREFUSED) returns a typed escalation, no throw', async () => {
   globalThis.fetch = (async () => {
     throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:11434'), { code: 'ECONNREFUSED' });

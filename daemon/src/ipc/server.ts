@@ -32,6 +32,7 @@ import { recordTurn } from '../commands/session-usage.js';
 import { conversation } from '../memory/conversation.js';
 import { exitIfStale } from '../build-stamp.js';
 import { logger } from '../memory/log.js';
+import { listServices, runServiceAction } from '../web/services.js';
 
 const DAEMON_NAME = 'kernel';
 const DAEMON_VERSION = '0.1.0';
@@ -91,12 +92,13 @@ function statsFromUsage(id: string, usage: BrainUsage): Stats {
     usage.outputTokens && usage.evalMs && usage.evalMs > 0
       ? usage.outputTokens / (usage.evalMs / 1000)
       : undefined;
-  // Local compute is free ($0). Cloud is priced from tokens when the brain reports them.
+  // Local compute is free ($0) — both Ollama (local) and LM Studio (lmstudio). Cloud is priced from
+  // tokens when the brain reports them.
   const estCostUsd =
-    brain === 'local'
-      ? 0
-      : (usage.promptTokens ?? 0) * CLOUD_PRICE_PER_TOKEN.input +
-        (usage.outputTokens ?? 0) * CLOUD_PRICE_PER_TOKEN.output;
+    brain === 'cloud'
+      ? (usage.promptTokens ?? 0) * CLOUD_PRICE_PER_TOKEN.input +
+        (usage.outputTokens ?? 0) * CLOUD_PRICE_PER_TOKEN.output
+      : 0;
   return {
     type: 'stats',
     id,
@@ -135,23 +137,48 @@ export function probeDaemonAlive(socketPath: string = config.socketPath): Promis
   });
 }
 
-/** A handler invoked for every successfully-parsed, schema-valid inbound frame. */
-export type FrameHandler = (frame: Frame, conn: net.Socket) => void;
-
 /**
- * Every currently-connected Face client. Server→client pushes (the breaker.preview frame)
- * fan out to all of them via `broadcast`. A socket is added on connect and removed on
- * close/error so a disconnected Face never receives a write (which would otherwise EPIPE).
+ * A connected client, transport-agnostic. The UDS path (the Mac Face) wraps a `net.Socket`; the web
+ * path (`web/http-server.ts`) wraps an SSE response. `send` is the ONE write primitive each transport
+ * implements (NDJSON line for UDS, `data:` SSE event for web). `kind` lets targeted pushes — the live
+ * browser screencast — reach only web viewers. `wantsBrowser` is the per-client screencast opt-in
+ * (web clients flip it via the `browser.view` frame; UDS clients never set it).
  */
-const clients = new Set<net.Socket>();
+export interface ClientConn {
+  send(frame: Frame): void;
+  kind: 'uds' | 'web';
+  wantsBrowser?: boolean;
+  /** Tear down the underlying transport on server shutdown (destroy the socket / end the SSE response). */
+  destroy?: () => void;
+}
+
+/** A handler invoked for every successfully-parsed, schema-valid inbound frame. */
+export type FrameHandler = (frame: Frame, conn: ClientConn) => void;
 
 /**
- * Push a frame to EVERY connected Face client. This is how the breaker's `emitPreview`
- * reaches the Face (SAFE-03): the daemon broadcasts the dry-run preview so the owner sees
- * the 10s cancel window. A write to a dead socket is swallowed (the socket's own 'error'
- * handler removes it) so a broadcast never crashes the daemon. Returns the number of
- * clients the frame was written to (0 == headless: the action stays gated by ceiling+audit,
- * but a live cancel is not possible — see SAFE-03 locked decision: proceed after the window).
+ * Every currently-connected client (Mac Face over UDS + web Faces over SSE). Server→client pushes
+ * (breaker.preview, model.state, …) fan out via `broadcast`. A client is added on connect and removed
+ * on close/error so a disconnected client never receives a write (which would otherwise EPIPE/throw).
+ */
+const clients = new Set<ClientConn>();
+
+/** Register a connected client (used by both the UDS server and the web HTTP server). */
+export function addClient(conn: ClientConn): void {
+  clients.add(conn);
+}
+
+/** Remove a connected client. Idempotent. */
+export function removeClient(conn: ClientConn): void {
+  clients.delete(conn);
+}
+
+/**
+ * Push a frame to EVERY connected client. This is how the breaker's `emitPreview` reaches the Face
+ * (SAFE-03): the daemon broadcasts the dry-run preview so the owner sees the 10s cancel window. A
+ * write to a dead client is swallowed (its own close/error handler removes it) so a broadcast never
+ * crashes the daemon. Returns the number of clients the frame was written to (0 == headless: the
+ * action stays gated by ceiling+audit, but a live cancel is not possible — see SAFE-03 locked
+ * decision: proceed after the window).
  */
 export function broadcast(frame: Frame): number {
   let delivered = 0;
@@ -160,10 +187,52 @@ export function broadcast(frame: Frame): number {
       send(conn, frame);
       delivered++;
     } catch {
-      /* a dead socket is cleaned up by its own error/close handler */
+      /* a dead client is cleaned up by its own error/close handler */
     }
   }
   return delivered;
+}
+
+/**
+ * Push a frame ONLY to web clients that opted into the live browser screencast (`browser.view`). The
+ * Mac Face never receives screencast frames (it has its own headful window), and a web client that
+ * closed its Browser pane stops getting them — so the heavy JPEG stream is confined to who is actually
+ * watching. Returns the number of viewers the frame reached.
+ */
+export function broadcastBrowser(frame: Frame): number {
+  let delivered = 0;
+  for (const conn of clients) {
+    if (conn.kind !== 'web' || !conn.wantsBrowser) continue;
+    try {
+      send(conn, frame);
+      delivered++;
+    } catch {
+      /* a dead client is cleaned up by its own error/close handler */
+    }
+  }
+  return delivered;
+}
+
+/** True if any connected web client currently wants the live browser screencast. */
+export function anyBrowserViewers(): boolean {
+  for (const conn of clients) {
+    if (conn.kind === 'web' && conn.wantsBrowser) return true;
+  }
+  return false;
+}
+
+/**
+ * The browser-view module injects its screencast start/stop reconciler here (avoids a server↔
+ * browser-view import cycle). Called whenever the set of browser viewers may have changed — a
+ * `browser.view` frame or a web client disconnecting — so the CDP screencast runs iff someone watches.
+ */
+let browserViewSync: () => void = () => {};
+export function setBrowserViewSync(fn: () => void): void {
+  browserViewSync = fn;
+}
+/** Re-evaluate whether the browser screencast should be running (viewer set changed). */
+export function notifyViewersChanged(): void {
+  browserViewSync();
 }
 
 /** The running IPC server handle returned to callers (e.g. the e2e). */
@@ -175,20 +244,36 @@ export interface IpcServer {
 }
 
 /**
- * Push a frame to a client. Server→client is just a newline-delimited JSON write.
+ * Push a frame to a client. Transport-agnostic — delegates to the client's own `send` (NDJSON line
+ * for UDS, `data:` SSE event for web).
  */
-export function send(conn: net.Socket, frame: Frame): void {
-  conn.write(JSON.stringify(frame) + '\n');
+export function send(conn: ClientConn, frame: Frame): void {
+  conn.send(frame);
 }
 
 /**
- * Attach the NDJSON line framing + validation pipeline to a single connection.
+ * Send the on-connect frame burst to a freshly-connected client: `ready`, then the runtime
+ * `capabilities`, the live `/override` state, the owner `settings.state`, and the current model
+ * readiness. Shared by the UDS server and the web HTTP server so both transports give a client the
+ * SAME initial snapshot. A client that ignores any of these is unaffected; all are also broadcast on
+ * change so a client never polls.
+ */
+export function sendConnectFrames(conn: ClientConn): void {
+  send(conn, { type: 'ready', daemon: DAEMON_NAME, version: DAEMON_VERSION });
+  send(conn, buildCapabilities());
+  send(conn, buildOverrideState());
+  send(conn, buildSettingsState());
+  send(conn, buildModelState());
+}
+
+/**
+ * Attach the NDJSON line framing + validation pipeline to a single UDS connection.
  * Maintains a per-connection buffer so a JSON line split across `data` events is
  * reassembled into exactly one parsed frame.
  */
-function attachReader(conn: net.Socket, onFrame: FrameHandler): void {
+function attachReader(sock: net.Socket, conn: ClientConn, onFrame: FrameHandler): void {
   let buffer = '';
-  conn.on('data', (chunk: Buffer) => {
+  sock.on('data', (chunk: Buffer) => {
     buffer += chunk.toString('utf8');
     let idx: number;
     while ((idx = buffer.indexOf('\n')) >= 0) {
@@ -200,8 +285,8 @@ function attachReader(conn: net.Socket, onFrame: FrameHandler): void {
   });
 }
 
-/** Parse + validate a single complete line; never throws out of the data handler. */
-function handleLine(line: string, conn: net.Socket, onFrame: FrameHandler): void {
+/** Parse a single complete NDJSON line, then route it; never throws out of the data handler. */
+function handleLine(line: string, conn: ClientConn, onFrame: FrameHandler): void {
   let parsed: unknown;
   try {
     parsed = JSON.parse(line);
@@ -209,6 +294,20 @@ function handleLine(line: string, conn: net.Socket, onFrame: FrameHandler): void
     send(conn, { type: 'error', message: 'malformed JSON frame' });
     return;
   }
+  routeFrame(parsed, conn, onFrame);
+}
+
+/**
+ * Validate an already-JSON-parsed value against the frozen FrameSchema and route it to the handler.
+ * SHARED by the UDS line reader and the web POST path (`web/http-server.ts`) so both transports apply
+ * the SAME validation + error discipline (T-01-09): an invalid frame replies with an `error` frame and
+ * NEVER throws; a handler error is likewise caught and surfaced as an `error` frame.
+ */
+export function routeFrame(
+  parsed: unknown,
+  conn: ClientConn,
+  onFrame: FrameHandler = defaultFrameHandler,
+): void {
   const result = FrameSchema.safeParse(parsed);
   if (!result.success) {
     const id = (parsed as { id?: unknown })?.id;
@@ -270,31 +369,29 @@ export function startIpc(
   // boot screen can advance only when the model is truly ready. Injected here (no readiness↔server cycle).
   setModelBroadcast((state) => broadcast({ type: 'model.state', ...state }));
 
-  const server = net.createServer((conn) => {
+  const server = net.createServer((sock) => {
     // MAINT-04: if dist was rebuilt since this process booted, a launchd-owned daemon exits here so
     // launchd relaunches it on the fresh code (automating the rebuild+kickstart). A no-op unless
     // genuinely stale; in dev/test (no build stamp) it never triggers.
     exitIfStale(logger);
-    conn.setEncoding('utf8');
+    sock.setEncoding('utf8');
+    // Wrap the raw socket in a transport-agnostic ClientConn so the handler/broadcast path is shared
+    // with the web (SSE) transport. `send` is one NDJSON line; `destroy` tears the socket down on shutdown.
+    const conn: ClientConn = {
+      kind: 'uds',
+      send: (frame) => sock.write(JSON.stringify(frame) + '\n'),
+      destroy: () => sock.destroy(),
+    };
     clients.add(conn);
-    send(conn, { type: 'ready', daemon: DAEMON_NAME, version: DAEMON_VERSION });
-    // Push the runtime capabilities right after ready so a client can render its dashboard
-    // immediately (brain, context cap, tools, integrations). A client that ignores it is unaffected.
-    send(conn, buildCapabilities());
-    // Then the control-surface state (SAFE-08): the live /override state (status pill + countdown)
-    // and the current owner safety posture (Settings toggles + spend ceiling). A client that ignores
-    // them is unaffected; both are also broadcast on change so the Face never polls.
-    send(conn, buildOverrideState());
-    send(conn, buildSettingsState());
-    // And the current model readiness (BRAIN-07) so a Face attaching to an ALREADY-WARM daemon
-    // transitions off its boot screen instantly; a Face attaching mid-warm-up sees `loading` and
-    // waits, then the broadcast flips it to `ready`.
-    send(conn, buildModelState());
-    attachReader(conn, onFrame);
+    // The on-connect frame burst (ready + capabilities + control-surface state + model readiness) so a
+    // client can render its dashboard immediately and a Face attaching to an ALREADY-WARM daemon leaves
+    // its boot screen instantly. Identical to the web transport's burst (sendConnectFrames).
+    sendConnectFrames(conn);
+    attachReader(sock, conn, onFrame);
     const drop = () => clients.delete(conn);
-    conn.on('close', drop);
-    conn.on('end', drop);
-    conn.on('error', () => {
+    sock.on('close', drop);
+    sock.on('end', drop);
+    sock.on('error', () => {
       // a client disconnecting mid-write must not crash the daemon; drop it from the fan-out set.
       drop();
     });
@@ -308,7 +405,7 @@ export function startIpc(
         server,
         close: () =>
           new Promise<void>((res) => {
-            for (const conn of clients) conn.destroy();
+            for (const conn of clients) conn.destroy?.();
             clients.clear();
             server.close(() => {
               try {
@@ -329,7 +426,7 @@ export function startIpc(
  * intent into the loop (the reply is pushed back to this connection by the loop); a
  * `ping` is answered immediately with `pong`. Other inbound types are ignored in P1.
  */
-export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
+export function defaultFrameHandler(frame: Frame, conn: ClientConn): void {
   switch (frame.type) {
     case 'utterance': {
       // A streaming brain surfaces deltas via `onToken`; we forward each as a `say` frame for a
@@ -360,6 +457,16 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
         // ("🔧 web · searching…", then a brief ✓). Purely informational; drives no action.
         onToolActivity: (event) => {
           send(conn, { type: 'tool.activity', id: frame.id, ...event });
+        },
+        // Live reasoning → a `reasoning` frame so the Face can show the model's chain-of-thought as it
+        // forms (deliberate turns only — quick turns never think). The answer streams via `say` after.
+        onThinking: (delta: string, final: boolean) => {
+          send(conn, { type: 'reasoning', id: frame.id, delta, final });
+        },
+        // Estimated prefill time → a `progress` frame so the Face shows a determinate progress bar
+        // (omitted on a cold start, where the Face keeps its honest indeterminate sweep).
+        onProgress: (etaMs: number) => {
+          send(conn, { type: 'progress', id: frame.id, etaMs, label: 'Processing prompt…' });
         },
       });
       break;
@@ -424,6 +531,33 @@ export function defaultFrameHandler(frame: Frame, conn: net.Socket): void {
         ts: t.ts,
       }));
       send(conn, { type: 'history.data', id: frame.id, turns });
+      break;
+    }
+    case 'browser.view':
+      // ADDITIVE arm (web→daemon): this web client opens/closes its Browser pane. Flip its per-client
+      // screencast opt-in, then ask the browser-view module to reconcile — start the CDP screencast if
+      // anyone now watches, stop it if nobody does (saves CPU). UDS clients never send this; no reply.
+      conn.wantsBrowser = frame.streaming;
+      notifyViewersChanged();
+      break;
+    case 'service.list':
+      // ADDITIVE arm (web→daemon): the Services panel asks for live background-service status.
+      void listServices().then((services) => send(conn, { type: 'service.data', id: frame.id, services }));
+      break;
+    case 'service.action': {
+      // ADDITIVE arm (web→daemon): stop an allowlisted background service, then reply with fresh status.
+      const { id, name, action } = frame;
+      void runServiceAction(name, action)
+        .then(async (outcome) => {
+          logger.info({ service: name, action, outcome }, 'web service action');
+          const services = await listServices();
+          send(conn, { type: 'service.data', id, services });
+        })
+        .catch(async (err) => {
+          logger.warn({ service: name, action, err: String(err) }, 'web service action failed');
+          const services = await listServices();
+          send(conn, { type: 'service.data', id, services });
+        });
       break;
     }
     default:

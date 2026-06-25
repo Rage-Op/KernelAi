@@ -19,7 +19,14 @@
 import type { BrainProvider, ToolCall, BrainUsage } from './brain/BrainProvider.js';
 import type { Provenance } from './memory/types.js';
 import { StubBrain } from './brain/StubBrain.js';
+import { estimatePrefillMs, recordPrefill } from './brain/prefill-estimate.js';
+import { localToolSpecs } from './tools/specs.js';
 import { inject } from './memory/inject.js';
+
+/** Constant chars the local brain prefills BEYOND context+history+prompt: the persona system prompt +
+ *  depth addendum + date anchor (~2.5k) PLUS the advertised tool catalog (the model prefills the tool
+ *  schemas too). Counting these keeps the progress estimate from running systematically short. */
+const SYSTEM_PREFILL_OVERHEAD_CHARS = 2500 + JSON.stringify(localToolSpecs()).length;
 import { conversation } from './memory/conversation.js';
 import { logSession } from './memory/log.js';
 import { dispatch } from './tools/registry.js';
@@ -44,6 +51,12 @@ export interface Intent {
   /** Report background tool use (start/ok/error) as the brain's tool loop runs — the server turns it
    *  into `tool.activity` frames so the Face can show what KERNEL is doing live. */
   onToolActivity?: (event: import('./brain/BrainProvider.js').ToolActivityEvent) => void;
+  /** Stream the brain's REASONING (chain-of-thought) as it forms — the server turns it into
+   *  `reasoning` frames so the Face can show what KERNEL is thinking live. `final:true` closes it. */
+  onThinking?: (chunk: string, final: boolean) => void;
+  /** Estimated prompt-processing (prefill) time in ms for this turn — the server turns it into a
+   *  `progress` frame so the Face shows a determinate progress bar. Absent on a cold start (no sample). */
+  onProgress?: (etaMs: number) => void;
   /** Memory dir override (tests run against a temp dir; defaults to config.memoryDir). */
   memoryDir?: string;
 }
@@ -177,14 +190,27 @@ export function drain(): Promise<void> {
         // prompts (the multi-turn fix). Only user-sourced turns are ever buffered (provenance), and a
         // schedule/tool wake gets no history — it isn't part of the owner's conversation.
         const history = intent.source === 'user' ? conversation.history() : [];
+        // PROGRESS ESTIMATE: before reasoning, estimate prompt-processing (prefill) time from the
+        // assembled prompt size + the learned throughput EWMA, so the Face can show a determinate bar.
+        // Null on a cold start (no sample yet) → no frame → the Face keeps its indeterminate sweep.
+        const promptText = promptFor(intent);
+        if (intent.onProgress) {
+          const historyChars = history.reduce((n, h) => n + h.content.length, 0);
+          // context (memory) + replayed history + the utterance + the constant system/tool overhead.
+          const etaMs = estimatePrefillMs(
+            context.length + historyChars + promptText.length + SYSTEM_PREFILL_OVERHEAD_CHARS,
+          );
+          if (etaMs != null) intent.onProgress(etaMs);
+        }
         // decide: route even the stub through reason() so the seam is real. `onToken` (when the
         // originator supplied one and the brain streams) surfaces deltas live for a snappy reply.
         const decision = await brain.reason(
-          promptFor(intent),
+          promptText,
           context,
           intent.onToken,
           history,
           intent.onToolActivity,
+          intent.onThinking,
         );
         // act: dispatch a real decision.action through the router. The loop NEVER imports the
         // gate or a tool directly — dispatch() runs gate.authorize internally, preserving the
@@ -220,6 +246,8 @@ export function drain(): Promise<void> {
         // surface per-pass telemetry AFTER the reply (the server pushes a stats frame; the client
         // renders it under the answer). Absent when the brain reported no usage (e.g. the stub).
         if (decision.usage && intent.onUsage) intent.onUsage(decision.usage);
+        // Learn this turn's prefill throughput so the NEXT turn's progress estimate is accurate.
+        recordPrefill(decision.usage?.promptTokens, decision.usage?.promptEvalMs);
       }
     } finally {
       running = false; // fall genuinely idle — no timer left armed

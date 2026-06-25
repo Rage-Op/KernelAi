@@ -64,6 +64,16 @@ export const PROFILE_DIR = path.join(
 /** The ONE persistent context (RESEARCH.md Pitfall 8: reuse across calls, never respawn per dispatch). */
 let ctx: BrowserContext | null = null;
 
+/**
+ * Optional observer notified with the live page whenever KERNEL navigates (browser-view.ts attaches the
+ * CDP screencast here). Decoupled via a setter so browser.ts never imports the view/IPC layer — no cycle.
+ * Best-effort: a throwing hook is swallowed so it can never break a navigation.
+ */
+let pageReadyHook: ((p: Page) => void) | null = null;
+export function setPageReadyHook(fn: ((p: Page) => void) | null): void {
+  pageReadyHook = fn;
+}
+
 // ─── WS-C hardening knobs ────────────────────────────────────────────────────
 /** Default navigation timeout — generous for slow-loading finance SPAs (was an implicit short one). */
 const DEFAULT_NAV_TIMEOUT_MS = 10_000;
@@ -146,6 +156,33 @@ async function page(): Promise<Page> {
   return existing.length > 0 ? existing[0] : c.newPage();
 }
 
+/**
+ * The live page IFF a context is already launched — never launches one. Used by the screencast view to
+ * attach to a page that exists (so opening the web Browser pane doesn't pop a blank headful window).
+ */
+export function livePageOrNull(): Page | null {
+  if (!ctx) return null;
+  const pages = ctx.pages();
+  return pages.length > 0 ? pages[0] : null;
+}
+
+/** Ensure a page exists (launching the persistent context if needed). Exposed for the screencast view. */
+export async function ensurePage(): Promise<Page> {
+  return page();
+}
+
+/** Close the live Chromium context (the "stop browser" service action). Idempotent; best-effort. */
+export async function closeBrowser(): Promise<void> {
+  if (!ctx) return;
+  const c = ctx;
+  ctx = null;
+  try {
+    await c.close();
+  } catch {
+    /* already gone */
+  }
+}
+
 /** TEST-ONLY seam: inject a pre-built context (e.g. a real headless Chromium) so the unit lane
  *  can drive a `file://` fixture without launching the dedicated headful profile. */
 export function __setContextForTest(mock: BrowserContext | null): void {
@@ -183,6 +220,13 @@ export async function navigate(
   // EVERY navigation logs the full URL + provenance BEFORE the goto (RESEARCH.md Pitfall 5).
   logger.info({ tool: 'browser', url, provenance }, 'browser: navigate');
   await gotoWithRetry(p, url, timeoutMs); // transient blips retry with backoff; a real failure throws.
+  // Notify the screencast view (if attached) that a live page is ready — so opening the web Browser
+  // pane mid-task, or KERNEL navigating while a viewer watches, attaches the CDP stream. Best-effort.
+  try {
+    pageReadyHook?.(p);
+  } catch {
+    /* a hook must never break navigation */
+  }
   return p;
 }
 

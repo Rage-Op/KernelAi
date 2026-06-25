@@ -16,17 +16,21 @@
  * injectable (fetchImpl) + timeout-guarded so a wedged server can never hang the warm-up.
  */
 import { OLLAMA_BASE_URL, OLLAMA_MODEL } from './LocalBrain.js';
+import { LMSTUDIO_BASE_URL, LMSTUDIO_MODELS_URL, resolveLmStudioModel } from './LMStudioBrain.js';
 import { logger } from '../memory/log.js';
 
 /** The model's lifecycle state for the boot gate. */
 export type ModelStatus = 'loading' | 'ready' | 'error';
 
+/** Which engine a readiness snapshot concerns. `lmstudio` is the second local engine (LM Studio). */
+export type BrainKind = 'cloud' | 'local' | 'lmstudio';
+
 /** A snapshot of model readiness, broadcast to the Face as a `model.state` frame. */
 export interface ModelState {
   status: ModelStatus;
   /** Which brain this state concerns. */
-  brain: 'cloud' | 'local';
-  /** The model tag (local brain only). */
+  brain: BrainKind;
+  /** The model tag (local engines only). */
   model?: string;
   /** A short, human-readable progress/error line for the boot screen. */
   detail?: string;
@@ -34,6 +38,15 @@ export interface ModelState {
 
 /** The live model state (one daemon, one model). Starts `loading` — warm-up resolves it. */
 let current: ModelState = { status: 'loading', brain: 'local', detail: 'Starting…' };
+
+/**
+ * Monotonic warm-up generation. Each `warmupActiveBrain` call captures `++generation` and only its
+ * own emits are honored while it is the latest — so a SLOW in-flight warm-up (e.g. a cold 9B Ollama
+ * load, up to 120s) can't clobber the state of a NEWER warm-up started by a brain switch. Without
+ * this, the stale warm-up's terminal emit would land last on the shared singleton and broadcast the
+ * wrong brain/status to every Face (and to the next client on connect).
+ */
+let generation = 0;
 
 /** The server-injected push that broadcasts a `model.state` frame to every connected Face. */
 let broadcastFn: ((state: ModelState) => void) | null = null;
@@ -48,8 +61,10 @@ export function getModelState(): ModelState {
   return current;
 }
 
-/** Set + broadcast the model state. */
-function emit(state: ModelState): void {
+/** Set + broadcast the model state, but ONLY if `gen` is still the latest warm-up generation — a
+ *  superseded warm-up drops its (possibly contradictory) emit instead of clobbering the active brain. */
+function emitFor(gen: number, state: ModelState): void {
+  if (gen !== generation) return; // a newer warm-up has taken over — ignore this stale transition
   current = state;
   logger.info({ event: 'model.state', ...state }, `model ${state.status}`);
   broadcastFn?.(state);
@@ -120,7 +135,21 @@ export async function loadModel(
   }
 }
 
-/** Dependencies for warm-up — all injectable so tests never touch a real Ollama. */
+/** True iff LM Studio's OpenAI-compatible server answers `GET /v1/models` (i.e. it is running). */
+export async function probeLmStudio(
+  baseUrl: string = LMSTUDIO_BASE_URL,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  try {
+    const url = baseUrl === LMSTUDIO_BASE_URL ? LMSTUDIO_MODELS_URL : `${baseUrl}/v1/models`;
+    const res = await fetchWithTimeout(fetchImpl, url, { method: 'GET' }, 3000);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Dependencies for warm-up — all injectable so tests never touch a real Ollama / LM Studio. */
 export interface WarmupDeps {
   baseUrl?: string;
   model?: string;
@@ -128,16 +157,45 @@ export interface WarmupDeps {
 }
 
 /**
- * Warm the ACTIVE brain and resolve `model.state`. Cloud → ready immediately (no local load). Local →
- * probe Ollama, confirm the model is installed, then load it; each failure resolves to `error` with an
- * actionable detail. Returns the terminal state. Safe to call again (e.g. on a brain switch).
+ * Warm the ACTIVE brain and resolve `model.state`. Cloud → ready immediately (no local load). Local
+ * (Ollama) → probe, confirm the model is installed, then load it. LM Studio → probe its server and
+ * confirm a model is loaded (LM Studio loads models itself; we don't force-load). Each failure resolves
+ * to `error` with an actionable detail. Returns the terminal state. Safe to call again (brain switch).
  */
 export async function warmupActiveBrain(
-  brain: 'cloud' | 'local',
+  brain: BrainKind,
   deps: WarmupDeps = {},
 ): Promise<ModelState> {
+  const gen = ++generation; // claim this warm-up's generation; later emits no-op if superseded
+
   if (brain === 'cloud') {
-    emit({ status: 'ready', brain: 'cloud', detail: 'Cloud brain (Claude) ready.' });
+    emitFor(gen, { status: 'ready', brain: 'cloud', detail: 'Cloud brain (Claude) ready.' });
+    return current;
+  }
+
+  if (brain === 'lmstudio') {
+    const f = deps.fetchImpl ?? fetch;
+    emitFor(gen, { status: 'loading', brain: 'lmstudio', detail: 'Connecting to LM Studio…' });
+    if (!(await probeLmStudio(deps.baseUrl, f))) {
+      emitFor(gen, {
+        status: 'error',
+        brain: 'lmstudio',
+        detail:
+          "LM Studio's server isn't running. Open LM Studio → developer tab → Start (or `lms server start`).",
+      });
+      return current;
+    }
+    const model = await resolveLmStudioModel(f);
+    emitFor(
+      gen,
+      model
+        ? { status: 'ready', brain: 'lmstudio', model, detail: `LM Studio ready — ${model}.` }
+        : {
+            status: 'error',
+            brain: 'lmstudio',
+            detail: 'LM Studio is running but no model is loaded. Load a model (MLX or GGUF) in LM Studio.',
+          },
+    );
     return current;
   }
 
@@ -145,10 +203,10 @@ export async function warmupActiveBrain(
   const model = deps.model ?? OLLAMA_MODEL;
   const f = deps.fetchImpl ?? fetch;
 
-  emit({ status: 'loading', brain: 'local', model, detail: 'Connecting to Ollama…' });
+  emitFor(gen, { status: 'loading', brain: 'local', model, detail: 'Connecting to Ollama…' });
 
   if (!(await probeOllama(baseUrl, f))) {
-    emit({
+    emitFor(gen, {
       status: 'error',
       brain: 'local',
       model,
@@ -159,7 +217,7 @@ export async function warmupActiveBrain(
 
   const models = await installedModels(baseUrl, f);
   if (!models.includes(model)) {
-    emit({
+    emitFor(gen, {
       status: 'error',
       brain: 'local',
       model,
@@ -168,10 +226,11 @@ export async function warmupActiveBrain(
     return current;
   }
 
-  emit({ status: 'loading', brain: 'local', model, detail: `Loading ${model}…` });
+  emitFor(gen, { status: 'loading', brain: 'local', model, detail: `Loading ${model}…` });
 
   const loaded = await loadModel(baseUrl, model, f);
-  emit(
+  emitFor(
+    gen,
     loaded
       ? { status: 'ready', brain: 'local', model, detail: `${model} loaded — ready.` }
       : { status: 'error', brain: 'local', model, detail: `Model ${model} failed to load.` },
@@ -183,4 +242,5 @@ export async function warmupActiveBrain(
 export function __resetModelStateForTest(): void {
   current = { status: 'loading', brain: 'local', detail: 'Starting…' };
   broadcastFn = null;
+  generation = 0;
 }

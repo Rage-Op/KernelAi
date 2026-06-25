@@ -32,9 +32,14 @@ function renderModelWindow(): string[] {
   const brain = currentBrainSelection();
   const snap = snapshot();
   const lines: string[] = [];
-  if (brain === 'local') {
+  // Both local engines (Ollama `local` + LM Studio `lmstudio`) run on-device — only `cloud` is remote.
+  if (brain !== 'cloud') {
+    // lastModel already reflects the engine's actual loaded model (LM Studio reports its tag per turn).
     const model = snap.lastModel ?? OLLAMA_MODEL;
-    lines.push(`Model window — local · ${model} · ${commas(OLLAMA_NUM_CTX)} tok`);
+    const engine = brain === 'lmstudio' ? 'lm studio' : 'local';
+    // OLLAMA_NUM_CTX is the Ollama window; for LM Studio it's a generic local default (the real window
+    // depends on how the model was loaded) — still vastly closer than the 1M cloud constant.
+    lines.push(`Model window — ${engine} · ${model} · ${commas(OLLAMA_NUM_CTX)} tok`);
     if (typeof snap.lastPromptTokens === 'number') {
       lines.push(
         `  last turn used ${commas(snap.lastPromptTokens)} prompt tok  ` +

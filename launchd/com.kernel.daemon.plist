@@ -9,6 +9,12 @@
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <!-- The web Face port for a launchd-managed daemon. Change here (then re-bootstrap) to use a different
+       port; kernel-up.sh's KERNEL_HTTP_PORT only affects a plain-node daemon, not this managed one. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KERNEL_HTTP_PORT</key><string>7777</string>
+  </dict>
   <key>StandardOutPath</key><string>__KERNEL_DIR__/kernel-memory/logs/daemon.out.log</string>
   <key>StandardErrorPath</key><string>__KERNEL_DIR__/kernel-memory/logs/daemon.err.log</string>
 </dict>

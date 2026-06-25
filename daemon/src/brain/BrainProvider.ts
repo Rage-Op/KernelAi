@@ -33,6 +33,8 @@ export interface BrainUsage {
   model?: string;
   /** Input/prompt tokens the model evaluated. */
   promptTokens?: number;
+  /** Prompt-eval (prefill) duration (ms) — the basis for the prompt-processing progress estimate. */
+  promptEvalMs?: number;
   /** Output/generated tokens. */
   outputTokens?: number;
   /** Generation duration (ms) — the basis for tokens/sec (outputTokens / evalMs). */
@@ -110,6 +112,13 @@ export interface BrainContext {
  * `onToolActivity` (ADDITIVE, optional) lets a tool-using brain report each background tool call as
  * it happens (start/ok/error) so the loop can surface it to the client. Brains that don't use tools
  * (or callers that don't care) omit it.
+ *
+ * `onThinking` (ADDITIVE, optional) streams the model's REASONING (chain-of-thought) as it forms,
+ * separately from the spoken `onToken` answer. A deliberate local pass (Ollama `think:true`) emits a
+ * `message.thinking` channel that would otherwise be discarded; surfacing it lets the Face show "what
+ * KERNEL is thinking" live. `final:true` marks the reasoning complete (the answer is about to begin).
+ * QUICK passes never think, so this simply never fires — the owner sees thoughts only when the model
+ * actually reasons. Brains that don't reason aloud (or callers that don't care) omit it.
  */
 export interface BrainProvider {
   reason(
@@ -118,6 +127,7 @@ export interface BrainProvider {
     onToken?: (chunk: string) => void,
     history?: ChatTurn[],
     onToolActivity?: (event: ToolActivityEvent) => void,
+    onThinking?: (chunk: string, final: boolean) => void,
   ): Promise<Decision>;
 }
 

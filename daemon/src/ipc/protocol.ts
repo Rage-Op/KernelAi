@@ -55,7 +55,7 @@ export const UiIntentSchema = z.object({
  */
 export const SettingsSchema = z.object({
   type: z.literal('settings'),
-  brain: z.enum(['cloud', 'local']),
+  brain: z.enum(['cloud', 'local', 'lmstudio']),
 });
 
 // --- daemon → Face -------------------------------------------------------------
@@ -140,7 +140,7 @@ export const ErrorSchema = z.object({
  */
 export const CapabilitiesSchema = z.object({
   type: z.literal('capabilities'),
-  brain: z.enum(['cloud', 'local']),
+  brain: z.enum(['cloud', 'local', 'lmstudio']),
   daemon: z.string(),
   version: z.string(),
   /** The memory-injection context cap in characters (config.injectCap). */
@@ -160,7 +160,7 @@ export const CapabilitiesSchema = z.object({
 export const StatsSchema = z.object({
   type: z.literal('stats'),
   id: z.string(),
-  brain: z.enum(['cloud', 'local']),
+  brain: z.enum(['cloud', 'local', 'lmstudio']),
   model: z.string().optional(),
   promptTokens: z.number().optional(),
   outputTokens: z.number().optional(),
@@ -238,6 +238,42 @@ export const SaySchema = z.object({
   delta: z.string(),
   /** True on the terminal frame — the reply is complete (finalize the line, flush any TTS). */
   final: z.boolean(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): the model's REASONING (chain-of-thought) streamed as it forms, SEPARATE
+ * from the spoken `say` answer. A deliberate local pass runs Ollama with `think:true`, which emits a
+ * `message.thinking` channel; rather than discard it (the old behavior), we stream it so the Face can
+ * show "what KERNEL is thinking" live, ahead of the answer. Correlated to the turn by `id` (the same
+ * id as the turn's `say`/`tool.activity` frames). `final:true` (with `delta:''`) closes the reasoning —
+ * the answer is about to begin. QUICK turns never think, so this frame simply never arrives then. This
+ * is the model's own private reasoning surfaced for transparency — informational, drives no action.
+ * Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const ReasoningSchema = z.object({
+  type: z.literal('reasoning'),
+  id: z.string(),
+  /** One reasoning delta to append to the in-progress thoughts (empty string on the final frame). */
+  delta: z.string(),
+  /** True on the terminal frame — reasoning is complete (the answer begins next). */
+  final: z.boolean(),
+});
+
+/**
+ * ADDITIVE arm (daemon→Face): an estimated PROMPT-PROCESSING (prefill) time for a turn, so the Face can
+ * render a DETERMINATE LM-Studio-style progress bar (it animates a fill over `etaMs`, then yields to the
+ * reasoning/answer stream). Ollama doesn't expose true incremental prefill progress over HTTP, so this
+ * is an honest ESTIMATE from a learned throughput EWMA (see brain/prefill-estimate.ts); on a cold start
+ * (no sample) NO progress frame is sent and the Face keeps its indeterminate sweep. Correlated to the
+ * turn by `id`. Informational — drives no action. Appended to the frozen union — never mutate existing arms.
+ */
+export const ProgressSchema = z.object({
+  type: z.literal('progress'),
+  id: z.string(),
+  /** Estimated prefill time in ms (the bar animates a determinate fill over this duration). */
+  etaMs: z.number(),
+  /** Optional short label (e.g. "Processing prompt…"). */
+  label: z.string().optional(),
 });
 
 /**
@@ -380,9 +416,92 @@ export const AuditDataSchema = z.object({
 export const ModelStateSchema = z.object({
   type: z.literal('model.state'),
   status: z.enum(['loading', 'ready', 'error']),
-  brain: z.enum(['cloud', 'local']),
+  brain: z.enum(['cloud', 'local', 'lmstudio']),
   model: z.string().optional(),
   detail: z.string().optional(),
+});
+
+/**
+ * ADDITIVE arm (daemon→web): one frame of the LIVE browser screencast (CDP `Page.screencastFrame`),
+ * so the WEB Face can show what KERNEL's Playwright browser is doing in real time. `dataB64` is a
+ * base64 JPEG; `url` is the page's current URL; `width`/`height` are the captured device pixels (for
+ * aspect-ratio). Delivered ONLY to web clients that opted in via `browser.view{streaming:true}` — it
+ * is NEVER broadcast to the Mac Face (targeted push, see server.broadcastBrowser). Informational —
+ * drives no action. Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const BrowserFrameSchema = z.object({
+  type: z.literal('browser.frame'),
+  dataB64: z.string(),
+  url: z.string(),
+  width: z.number(),
+  height: z.number(),
+});
+
+/**
+ * ADDITIVE arm (daemon→web): the browser's high-level state — whether a live page exists and its
+ * current URL — so the web Face can label the screencast pane and show "idle" when nothing is loaded.
+ * Pushed to opted-in web clients on screencast start/stop and on navigation. Appended to the frozen
+ * union — existing arms are NEVER mutated.
+ */
+export const BrowserStateSchema = z.object({
+  type: z.literal('browser.state'),
+  active: z.boolean(),
+  url: z.string().optional(),
+});
+
+/**
+ * ADDITIVE arm (web→daemon): subscribe/unsubscribe THIS client to the live browser screencast. The
+ * web Face sends `{streaming:true}` when its Browser pane is open and `{streaming:false}` when it
+ * closes, so the daemon only runs the CDP screencast (and only emits `browser.frame`s) while someone
+ * is watching — saving CPU on the 16GB Mac. Appended to the frozen union — existing arms are NEVER
+ * mutated.
+ */
+export const BrowserViewSchema = z.object({
+  type: z.literal('browser.view'),
+  streaming: z.boolean(),
+});
+
+/**
+ * ADDITIVE arm (web→daemon): request the live status of the background services KERNEL depends on
+ * (Ollama, LM Studio, the Playwright browser, stray duplicate daemons), so the web Face can show a
+ * mini control panel. Correlated to `service.data` by `id`. Appended to the frozen union.
+ */
+export const ServiceListSchema = z.object({
+  type: z.literal('service.list'),
+  id: z.string(),
+});
+
+/**
+ * ADDITIVE arm (web→daemon): perform an action on ONE allowlisted background service. `name` must be a
+ * known service (the daemon refuses anything else — no arbitrary process control from the browser), and
+ * `action` is currently just `stop` (kill/stop the service). The daemon replies with a fresh
+ * `service.data` reflecting the new state. Appended to the frozen union.
+ */
+export const ServiceActionSchema = z.object({
+  type: z.literal('service.action'),
+  id: z.string(),
+  name: z.string(),
+  action: z.enum(['stop', 'restart']),
+});
+
+/**
+ * ADDITIVE arm (daemon→web): the live status of each background service for the web Face's control
+ * panel. `running` + optional `pid`/`detail`, and `actions` lists what the owner may do (e.g. `['stop']`).
+ * Sent in reply to `service.list`/`service.action` (same `id`). Appended to the frozen union.
+ */
+export const ServiceDataSchema = z.object({
+  type: z.literal('service.data'),
+  id: z.string().optional(),
+  services: z.array(
+    z.object({
+      name: z.string(),
+      label: z.string(),
+      running: z.boolean(),
+      pid: z.number().optional(),
+      detail: z.string().optional(),
+      actions: z.array(z.string()),
+    }),
+  ),
 });
 
 /**
@@ -401,6 +520,9 @@ export const FrameSchema = z.discriminatedUnion('type', [
   HistoryRequestSchema, // additive (Face→daemon request persisted chat history)
   SettingsUpdateSchema, // additive (Face→daemon update owner safety posture)
   AuditQuerySchema, // additive (Face→daemon request recent audit entries)
+  BrowserViewSchema, // additive (web→daemon subscribe/unsubscribe the live browser screencast)
+  ServiceListSchema, // additive (web→daemon request background-service status)
+  ServiceActionSchema, // additive (web→daemon stop/restart an allowlisted background service)
   // daemon → Face
   ReadySchema,
   ReplySchema,
@@ -414,6 +536,8 @@ export const FrameSchema = z.discriminatedUnion('type', [
   CapabilitiesSchema, // additive (daemon→Face runtime capabilities on connect)
   StatsSchema, // additive (daemon→Face per-turn token/timing/cost telemetry)
   SaySchema, // additive (daemon→Face streamed reply deltas for real-time render + TTS)
+  ReasoningSchema, // additive (daemon→Face streamed chain-of-thought for live reasoning visibility)
+  ProgressSchema, // additive (daemon→Face estimated prefill time for a determinate progress bar)
   WidgetCommandSchema, // additive (daemon→Face widget-displayer command-language string)
   ToolActivitySchema, // additive (daemon→Face background tool-use activity for live visibility)
   HistoryDataSchema, // additive (daemon→Face persisted chat history on request)
@@ -421,6 +545,9 @@ export const FrameSchema = z.discriminatedUnion('type', [
   SettingsStateSchema, // additive (daemon→Face current owner safety posture for the Settings page)
   AuditDataSchema, // additive (daemon→Face recent audit entries for the Activity view)
   ModelStateSchema, // additive (daemon→Face model warm-up readiness for the boot gate)
+  BrowserFrameSchema, // additive (daemon→web live browser screencast frame)
+  BrowserStateSchema, // additive (daemon→web browser high-level state for the screencast pane)
+  ServiceDataSchema, // additive (daemon→web background-service status for the control panel)
 ]);
 
 /** Any valid frame. */
@@ -446,6 +573,8 @@ export type BreakerCancel = z.infer<typeof BreakerCancelSchema>;
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 export type Stats = z.infer<typeof StatsSchema>;
 export type Say = z.infer<typeof SaySchema>;
+export type Reasoning = z.infer<typeof ReasoningSchema>;
+export type Progress = z.infer<typeof ProgressSchema>;
 export type WidgetCommand = z.infer<typeof WidgetCommandSchema>;
 export type ToolActivity = z.infer<typeof ToolActivitySchema>;
 export type HistoryRequest = z.infer<typeof HistoryRequestSchema>;
@@ -456,6 +585,12 @@ export type SettingsState = z.infer<typeof SettingsStateSchema>;
 export type AuditQuery = z.infer<typeof AuditQuerySchema>;
 export type AuditData = z.infer<typeof AuditDataSchema>;
 export type ModelStateFrame = z.infer<typeof ModelStateSchema>;
+export type BrowserFrame = z.infer<typeof BrowserFrameSchema>;
+export type BrowserState = z.infer<typeof BrowserStateSchema>;
+export type BrowserView = z.infer<typeof BrowserViewSchema>;
+export type ServiceList = z.infer<typeof ServiceListSchema>;
+export type ServiceAction = z.infer<typeof ServiceActionSchema>;
+export type ServiceData = z.infer<typeof ServiceDataSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum
