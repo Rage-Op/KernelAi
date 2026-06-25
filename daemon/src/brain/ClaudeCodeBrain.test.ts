@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 
 import { ClaudeCodeBrain, __setRunnerForTest, type ClaudeCodeResult } from './ClaudeCodeBrain.js';
 
-test('ClaudeCodeBrain: clean JSON stdout parses to Decision.reply (Green/Yellow-only flags)', async () => {
+test('ClaudeCodeBrain: clean JSON stdout parses to Decision.reply (full-access flags + tier prompt)', async () => {
   let seenArgs: string[] = [];
   __setRunnerForTest(async (args: string[]): Promise<ClaudeCodeResult> => {
     seenArgs = args;
@@ -30,18 +30,18 @@ test('ClaudeCodeBrain: clean JSON stdout parses to Decision.reply (Green/Yellow-
   assert.equal(decision.reply, 'Refactored the parser.', 'stdout .result maps to Decision.reply');
   assert.ok(seenArgs.includes('-p'), 'invokes headless print mode');
   assert.ok(seenArgs.includes('--output-format') && seenArgs.includes('json'), 'requests JSON output');
-  // PURE REASONER fence: dontAsk + NO allowlisted tools (denies all tool use; no secret-fence bypass).
+  // FULL ACCESS (owner's choice): bypassPermissions — all tools, no approval prompts.
   const pmIdx = seenArgs.indexOf('--permission-mode');
-  assert.ok(pmIdx >= 0 && seenArgs[pmIdx + 1] === 'dontAsk', '--permission-mode dontAsk is set');
-  assert.ok(!seenArgs.includes('--allowedTools'), 'no tools are allowlisted (pure text reasoner)');
+  assert.ok(pmIdx >= 0 && seenArgs[pmIdx + 1] === 'bypassPermissions', '--permission-mode bypassPermissions is set');
   // SUBSCRIPTION mode: NO --bare (which would force ANTHROPIC_API_KEY auth and defeat the subscription).
   assert.ok(!seenArgs.includes('--bare'), 'subscription mode runs WITHOUT --bare');
-  // KERNEL identity + memory context are injected via an appended system prompt.
+  // KERNEL identity + memory context + the TIERED-ACCESS policy are injected via an appended system prompt.
   const sysIdx = seenArgs.indexOf('--append-system-prompt');
   assert.ok(sysIdx >= 0, 'injects an appended system prompt');
   const sysPrompt = seenArgs[sysIdx + 1] ?? '';
   assert.ok(/KERNEL/.test(sysPrompt), 'the system prompt carries KERNEL identity');
   assert.ok(sysPrompt.includes('MEMCTX_MARKER'), 'the system prompt carries the assembled memory context');
+  assert.ok(/GREEN/.test(sysPrompt) && /RED/.test(sysPrompt), 'the system prompt carries the tiered-access policy');
 
   __setRunnerForTest(null);
 });

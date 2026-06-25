@@ -12,13 +12,16 @@
  * `--append-system-prompt` so it answers AS KERNEL, and the run is spawned in the owner's home dir so it
  * doesn't auto-load a project's CLAUDE.md.
  *
- * PURE TEXT REASONER (deliberate scope + security posture): unlike the API ClaudeBrain (which returns a
- * Decision.action the KERNEL loop dispatches through the §8 gate), Claude Code executes its OWN tools —
- * which are NOT bound by KERNEL's gate or secret-fence, so granting even `Read` would let it read secrets
- * (~/.kernel.env, ~/.ssh) outside KERNEL's control. So we grant NO tools: `--permission-mode dontAsk`
- * with no `--allowedTools` denies ALL tool use (verified: Read + Bash are blocked), leaving a pure
- * reasoner. It answers; it does not drive KERNEL's hands. For tool-driving work the owner uses the LM
- * Studio engine (whose actions go through KERNEL's gate); this brain is the cloud-grade reasoning tier.
+ * FULL-ACCESS AGENT (the owner's EXPLICIT choice — "give it all the claude code own tools, full access,
+ * no bargain"): this brain runs Claude Code with ALL its native tools and `--permission-mode
+ * bypassPermissions` — read/write files, run shell, search, browse, with NO approval prompts. Claude
+ * Code executes those tools in its OWN process, so they DO NOT pass through KERNEL's §8 gate, secret
+ * fence, RED breaker, or audit log (unlike LM Studio / API-Claude, which return a Decision.action the
+ * loop gates). The owner accepts that trade. The TIERED-ACCESS POLICY that the gate would normally
+ * enforce is instead fed to the model AS PROMPT (TIER_POLICY below): it self-applies 🟢/🟡/🔴 judgement —
+ * notably, pause and ask before a 🔴 irreversible/financial action. This is prompt-level governance, not
+ * a hard guarantee; it is exactly what the owner asked for. (See KERNEL_FRAMING below for the policy.
+ * Use the LM Studio engine when you want actions to flow through KERNEL's hard gate instead.)
  *
  * ABSENT-TOLERANT: a spawn ENOENT (no `claude` on PATH), a non-zero exit, or garbled (non-JSON) stdout
  * each return a TYPED ESCALATION Decision — never a throw across the loop boundary.
@@ -91,15 +94,27 @@ const realRunner: ClaudeCodeRunner = (args: string[]) =>
     child.on('close', (code) => resolve({ code: code ?? 0, stdout, stderr }));
   });
 
-/** A compact KERNEL framing injected on top of the assembled memory context — note it deliberately does
- *  NOT advertise KERNEL's tool catalog (this brain can't drive KERNEL's gated tools; it only reasons). */
+/** KERNEL identity + the TIERED-ACCESS POLICY, injected on top of the assembled memory context. Because
+ *  this brain has FULL tool access OUTSIDE KERNEL's hard gate, the gate's tier policy is given to the
+ *  model as guidance to self-apply (the owner's chosen posture). Tiers mirror safety/tiers.ts. */
 const KERNEL_FRAMING =
-  'You are KERNEL, Pravin\'s persistent personal AI agent. Answer AS KERNEL — warm, sharp, concise, and ' +
-  'COMPLETE (never announce a task then stop). Reply in natural prose. Use the memory/context above to ' +
-  'follow up naturally. You are running here as a reasoning brain; just give Pravin the best answer.';
+  "You are KERNEL, Pravin's persistent personal AI agent, acting on his Mac with FULL tool access (read/" +
+  'write files, run shell commands, search, browse, edit). You have his standing permission to ACT — there ' +
+  'is no approval prompt — so DO the task, don\'t just describe it, then report what you did. Be warm, ' +
+  'sharp, concise, and COMPLETE (never announce a task then stop). Use the memory/context above to follow ' +
+  'up naturally.\n\n' +
+  'Apply this TIERED-ACCESS judgement yourself (you are trusted to act, so this replaces an approval gate):\n' +
+  '- GREEN (reversible — read/list/inspect, capture, search the web): do freely.\n' +
+  '- YELLOW (recoverable — create/edit a file, change a setting, send one ordinary message): do it, then ' +
+  'tell Pravin exactly what you changed.\n' +
+  '- RED (irreversible or money — delete data, `rm -rf`, purchase, transfer, sign, change access/security ' +
+  'settings, mass-send): STOP and ask Pravin first in your reply BEFORE doing it, unless he already clearly ' +
+  'authorized that specific action. Never do a Red action speculatively.\n' +
+  "Stay within Pravin's interests and never touch his secrets/credentials (~/.kernel.env, ~/.ssh, keys) " +
+  'unless he explicitly asks.';
 
-/** Build the headless argv: print mode, JSON output, subscription auth (NO --bare), KERNEL identity
- *  injected, and NO tools (pure reasoner). */
+/** Build the headless argv: print mode, JSON output, subscription auth (NO --bare), KERNEL identity +
+ *  tier policy injected, and FULL tool access (bypassPermissions — the owner's explicit choice). */
 function argvFor(prompt: string, systemPrompt: string): string[] {
   return [
     '-p',
@@ -109,11 +124,10 @@ function argvFor(prompt: string, systemPrompt: string): string[] {
     // NO --bare → use the owner's `claude login` SUBSCRIPTION auth (not ANTHROPIC_API_KEY).
     '--append-system-prompt',
     systemPrompt,
-    // dontAsk with NO --allowedTools denies ALL tool use → a pure text reasoner. This is deliberate:
-    // Claude Code's own tools bypass KERNEL's gate/secret-fence, so we grant none (verified: Read+Bash
-    // are denied). KERNEL's gated fs/shell (via the LM Studio engine) remain the path for file access.
+    // FULL ACCESS (owner's explicit "no bargain"): all native Claude Code tools, no approval prompts.
+    // These run OUTSIDE KERNEL's gate — the tier policy in the system prompt is the (soft) governance.
     '--permission-mode',
-    'dontAsk',
+    'bypassPermissions',
   ];
 }
 
