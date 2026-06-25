@@ -3,7 +3,7 @@
  * Mirrors daemon/src/ipc/protocol.ts (kept deliberately small — only what the UI uses). The daemon
  * remains the single source of truth; these are structural types for the browser side.
  */
-export type Brain = 'cloud' | 'local' | 'lmstudio';
+export type Brain = 'cloud' | 'lmstudio';
 
 // ---- daemon → web ----
 export interface ReadyFrame { type: 'ready'; daemon: string; version: string; }
@@ -37,11 +37,21 @@ export interface BrowserFrameFrame { type: 'browser.frame'; dataB64: string; url
 export interface BrowserStateFrame { type: 'browser.state'; active: boolean; url?: string; }
 export interface ServiceInfo { name: string; label: string; running: boolean; pid?: number; detail?: string; actions: string[]; }
 export interface ServiceDataFrame { type: 'service.data'; id?: string; services: ServiceInfo[]; }
+export interface LmStudioModelInfo {
+  key: string; displayName: string; format?: string; sizeBytes?: number;
+  paramsString?: string; maxContextLength?: number; loaded: boolean; loadedContextLength?: number;
+  instanceId?: string; reasoning?: boolean; toolUse?: boolean;
+}
+export interface LmStudioDataFrame {
+  type: 'lmstudio.data'; id?: string; serverUp: boolean; active?: string;
+  note?: string; models: LmStudioModelInfo[];
+}
 
 export type InboundFrame =
   | ReadyFrame | CapabilitiesFrame | ReplyFrame | SayFrame | ReasoningFrame | ProgressFrame
   | ToolActivityFrame | StatsFrame | ModelStateFrame | OverrideStateFrame | SettingsStateFrame
   | HistoryDataFrame | ErrorFrame | BrowserFrameFrame | BrowserStateFrame | ServiceDataFrame
+  | LmStudioDataFrame
   | { type: string; [k: string]: unknown }; // tolerate unknown/future arms
 
 // ---- web → daemon ----
@@ -54,15 +64,21 @@ export interface HistoryRequestFrame { type: 'history.request'; id: string; limi
 export interface BrowserViewFrame { type: 'browser.view'; streaming: boolean; }
 export interface ServiceListFrame { type: 'service.list'; id: string; }
 export interface ServiceActionFrame { type: 'service.action'; id: string; name: string; action: 'stop' | 'restart'; }
+export interface LmStudioListFrame { type: 'lmstudio.list'; id: string; }
+export interface LmStudioActionFrame {
+  type: 'lmstudio.action'; id: string; action: 'load' | 'unload';
+  key: string; contextLength?: number;
+}
 
 export type OutboundFrame =
   | UtteranceFrame | PingFrame | SettingsFrame | SettingsUpdateFrame
-  | OverrideFrame | HistoryRequestFrame | BrowserViewFrame | ServiceListFrame | ServiceActionFrame;
+  | OverrideFrame | HistoryRequestFrame | BrowserViewFrame | ServiceListFrame | ServiceActionFrame
+  | LmStudioListFrame | LmStudioActionFrame;
 
 /** Brain → human label (matches the daemon's engine naming). */
 export function engineLabel(b: Brain): string {
-  return b === 'cloud' ? 'cloud' : b === 'lmstudio' ? 'lm studio' : 'ollama';
+  return b === 'cloud' ? 'cloud' : 'lm studio';
 }
 export function shortBrain(b: Brain): string {
-  return b === 'cloud' ? 'claude' : b === 'lmstudio' ? 'lm studio' : 'ollama';
+  return b === 'cloud' ? 'claude' : 'lm studio';
 }

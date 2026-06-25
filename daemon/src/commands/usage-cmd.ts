@@ -9,13 +9,13 @@
  * `usage reset` zeroes the accounting window. Pure read otherwise (no memory writes).
  */
 import { resetUsage, snapshot } from './session-usage.js';
-import { OLLAMA_NUM_CTX } from '../brain/LocalBrain.js';
+import { GEN_NUM_CTX } from '../brain/persona.js';
 import { bar, commas, ms, since, usd } from './format.js';
 
 const SEP = '\n';
-/** The local context window used for the last-turn fill bar — the real Ollama num_ctx (a generic
- *  local default; LM Studio's true window depends on how the model was loaded). */
-const LOCAL_CTX_WINDOW = OLLAMA_NUM_CTX;
+/** The local context window used for the last-turn fill bar — a generic local default; LM Studio's
+ *  true window depends on how the model was loaded. */
+const LOCAL_CTX_WINDOW = GEN_NUM_CTX;
 
 /** Build the session usage report. `arg === 'reset'` clears the window first. */
 export function runUsageReport(arg = ''): string {

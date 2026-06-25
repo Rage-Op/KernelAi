@@ -19,8 +19,8 @@ test('an empty session reports no measured turns', () => {
 
 test('recorded local turns accumulate tokens, $0 cost, and a cloud-equivalent', () => {
   resetUsage();
-  recordTurn({ brain: 'local', model: 'qwen2.5:7b', promptTokens: 1000, outputTokens: 200, evalMs: 4000 });
-  recordTurn({ brain: 'local', model: 'qwen2.5:7b', promptTokens: 500, outputTokens: 100, evalMs: 2000 });
+  recordTurn({ brain: 'lmstudio', model: 'qwen2.5:7b', promptTokens: 1000, outputTokens: 200, evalMs: 4000 });
+  recordTurn({ brain: 'lmstudio', model: 'qwen2.5:7b', promptTokens: 500, outputTokens: 100, evalMs: 2000 });
 
   const snap = snapshot();
   assert.equal(snap.turns, 2);
@@ -34,7 +34,7 @@ test('recorded local turns accumulate tokens, $0 cost, and a cloud-equivalent', 
 
   const report = runUsageReport();
   assert.match(report, /1,800 total/);
-  assert.match(report, /local \(free\)/);
+  assert.match(report, /lmstudio \(free\)/);
   assert.match(report, /cloud-equivalent/);
 });
 
@@ -48,7 +48,7 @@ test('cloud turns report the billed cost', () => {
 
 test('/usage reset clears the accounting window', () => {
   resetUsage();
-  recordTurn({ brain: 'local', promptTokens: 100, outputTokens: 50, evalMs: 1000 });
+  recordTurn({ brain: 'lmstudio', promptTokens: 100, outputTokens: 50, evalMs: 1000 });
   assert.equal(snapshot().turns, 1);
   const msg = runUsageReport('reset');
   assert.match(msg, /reset/i);

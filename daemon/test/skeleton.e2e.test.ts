@@ -1,22 +1,23 @@
-// RED until 01-02 + 01-03; this is the Walking Skeleton acceptance contract.
-//
-// This test names the FULL tick the skeleton must satisfy end to end:
+// The Walking Skeleton acceptance contract: the FULL tick end to end —
 //   perceive → recall → decide → act → log
-// It deliberately imports modules that Plans 01-02 and 01-03 will create
-// (../src/ipc/server.js, ../src/loop.js, ../src/memory/inject.js). Those modules
-// do not exist yet, so this file fails to import — that RED state is intentional
-// and is the contract the rest of Phase 1 makes pass. Do NOT force this green.
+// Originally exercised over the UDS socket; it now drives the SAME frame router (routeFrame →
+// defaultFrameHandler → enqueue → loop) through an in-memory mock ClientConn (the primitive the web
+// SSE transport wraps), so the transport is irrelevant to the contract being proved.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { config, INJECT_CAP } from '../src/config.js';
 
-// --- Modules that land in Plans 01-02 / 01-03 (do not exist yet → RED) ---
-import { startIpcServer } from '../src/ipc/server.js';
+import {
+  defaultFrameHandler,
+  routeFrame,
+  sendConnectFrames,
+  type ClientConn,
+} from '../src/ipc/server.js';
+import type { Frame } from '../src/ipc/protocol.js';
 import { runTick, setBrain, enqueue } from '../src/loop.js';
 import { inject } from '../src/memory/inject.js';
 
@@ -28,28 +29,25 @@ import { SpeakSchema } from '../src/ipc/protocol.js';
 import { register, clearRegistry, dispatch } from '../src/tools/registry.js';
 import { z } from 'zod';
 
-/** A minimal NDJSON client: connects, splits incoming frames on '\n'. */
-function connectClient(socketPath: string): Promise<{
-  socket: net.Socket;
-  frames: () => unknown[];
-}> {
-  return new Promise((resolve, reject) => {
-    const received: unknown[] = [];
-    let buffer = '';
-    const socket = net.createConnection(socketPath, () => {
-      resolve({ socket, frames: () => received });
-    });
-    socket.on('data', (chunk) => {
-      buffer += chunk.toString('utf8');
-      let idx: number;
-      while ((idx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 1);
-        if (line.trim()) received.push(JSON.parse(line));
-      }
-    });
-    socket.on('error', reject);
-  });
+/**
+ * A mock client over the transport-agnostic frame router: `send` routes an inbound frame through the
+ * real `defaultFrameHandler` (enqueue → loop), and the daemon's pushes land in `frames()`. `connect()`
+ * replays the on-connect burst (so `ready` arrives), mirroring what the web SSE transport does.
+ */
+function mockClient(): {
+  conn: ClientConn;
+  frames: () => Frame[];
+  send: (f: unknown) => void;
+  connect: () => void;
+} {
+  const received: Frame[] = [];
+  const conn: ClientConn = { kind: 'web', send: (f) => received.push(f) };
+  return {
+    conn,
+    frames: () => received,
+    send: (f) => routeFrame(f, conn, defaultFrameHandler),
+    connect: () => sendConnectFrames(conn),
+  };
 }
 
 function todayLogPath(): string {
@@ -71,23 +69,19 @@ function waitFor<T>(fn: () => T | undefined, timeoutMs = 2000): Promise<T> {
 }
 
 test('skeleton: one tick perceive→recall→decide→act→log end to end', async () => {
-  // (1) IPC server listens on the UDS and the client receives a `ready` frame on connect.
-  const server = await startIpcServer();
-  const client = await connectClient(config.socketPath);
-  const ready = (await waitFor(() =>
-    client.frames().find((f) => (f as { type?: string }).type === 'ready'),
-  )) as { type: string };
-  assert.equal(ready.type, 'ready', 'daemon must send `ready` on connect');
+  // (1) On connect the client receives a `ready` frame (the on-connect frame burst).
+  const client = mockClient();
+  client.connect();
+  const ready = client.frames().find((f) => f.type === 'ready') as { type: string } | undefined;
+  assert.equal(ready?.type, 'ready', 'daemon must send `ready` on connect');
 
-  // (2) Sending an `utterance` frame runs one loop tick; the client receives a
+  // (2) Routing an `utterance` frame runs one loop tick; the client receives a
   //     `reply` frame whose text contains the StubBrain echo.
   const id = 'e2e-1';
-  client.socket.write(
-    JSON.stringify({ type: 'utterance', id, text: 'hello kernel', final: true }) + '\n',
-  );
+  client.send({ type: 'utterance', id, text: 'hello kernel', final: true });
   await runTick();
   const reply = (await waitFor(() =>
-    client.frames().find((f) => (f as { type?: string }).type === 'reply'),
+    client.frames().find((f) => f.type === 'reply'),
   )) as { type: string; text: string };
   assert.match(reply.text, /StubBrain echo/, 'reply must carry the StubBrain echo');
   assert.match(reply.text, /hello kernel/, 'reply must echo the utterance');
@@ -104,9 +98,6 @@ test('skeleton: one tick perceive→recall→decide→act→log end to end', asy
     'injected context must begin with IDENTITY.md',
   );
   assert.ok(injected.length <= INJECT_CAP, `injected context must be ≤ ${INJECT_CAP} chars`);
-
-  client.socket.end();
-  await server.close();
 });
 
 // ---------------------------------------------------------------------------
@@ -130,19 +121,17 @@ class MockToolUseBrain implements BrainProvider {
   }
 }
 
-test('03-01: utterance → mock ClaudeBrain → reply frame over IPC; speak frame producible', async () => {
+test('03-01: utterance → mock ClaudeBrain → reply frame over the router; speak frame producible', async () => {
   setBrain(new MockReplyBrain());
-  const server = await startIpcServer();
-  const client = await connectClient(config.socketPath);
-  await waitFor(() => client.frames().find((f) => (f as { type?: string }).type === 'ready'));
+  const client = mockClient();
+  client.connect();
+  assert.ok(client.frames().find((f) => f.type === 'ready'), 'ready arrives on connect');
 
   const id = 'p3-reply-1';
-  client.socket.write(
-    JSON.stringify({ type: 'utterance', id, text: 'how is my day', final: true }) + '\n',
-  );
+  client.send({ type: 'utterance', id, text: 'how is my day', final: true });
   await runTick();
   const reply = (await waitFor(() =>
-    client.frames().find((f) => (f as { type?: string; id?: string }).type === 'reply'),
+    client.frames().find((f) => f.type === 'reply'),
   )) as { type: string; id: string; text: string };
   assert.equal(reply.id, id, 'reply is correlated to the utterance id');
   assert.match(reply.text, /Cloud reply to: how is my day/, 'the mock ClaudeBrain reply is surfaced');
@@ -152,8 +141,6 @@ test('03-01: utterance → mock ClaudeBrain → reply frame over IPC; speak fram
   assert.equal(SpeakSchema.safeParse(speak).success, true, 'assembled speak frame validates against SpeakSchema');
   assert.ok(speak.cues.length >= 1, 'the speak frame carries char-offset cues');
 
-  client.socket.end();
-  await server.close();
   setBrain(new StubBrain()); // restore the default
 });
 

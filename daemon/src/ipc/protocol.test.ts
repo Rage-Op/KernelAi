@@ -113,9 +113,9 @@ test('protocol: control-surface frames round-trip (additive — override.state /
     true,
   );
   // model.state (boot gate) — status constrained; model/detail optional
-  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'loading', brain: 'local', model: 'qwen3.5:9b', detail: 'Loading…' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'loading', brain: 'lmstudio', model: 'qwen3.5:9b', detail: 'Loading…' }).success, true);
   assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'ready', brain: 'cloud' }).success, true, 'model/detail optional');
-  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'bogus', brain: 'local' }).success, false, 'status is loading|ready|error');
+  assert.equal(FrameSchema.safeParse({ type: 'model.state', status: 'bogus', brain: 'lmstudio' }).success, false, 'status is loading|ready|error');
 });
 
 test('protocol: history.request / history.data round-trip (additive, persisted chat history)', () => {
@@ -180,7 +180,9 @@ test('protocol: the designed-for P2/P3 shapes are part of the frozen contract', 
 
 test('protocol: a settings frame (brain toggle) round-trips through FrameSchema', () => {
   assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'cloud' }).success, true);
-  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'local' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'lmstudio' }).success, true);
+  // the removed Ollama `local` engine is no longer a valid brain
+  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'local' }).success, false);
   // an out-of-enum brain is rejected
   assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'martian' }).success, false);
   // missing brain is rejected
@@ -240,7 +242,7 @@ test('protocol: a capabilities frame round-trips through FrameSchema', () => {
   assert.equal(
     FrameSchema.safeParse({
       type: 'capabilities',
-      brain: 'local',
+      brain: 'lmstudio',
       daemon: 'kernel',
       version: '0.1.0',
       injectCap: 16384,
@@ -256,7 +258,7 @@ test('protocol: a capabilities frame round-trips through FrameSchema', () => {
   );
   // missing tools array is rejected
   assert.equal(
-    FrameSchema.safeParse({ type: 'capabilities', brain: 'local', daemon: 'k', version: '1', injectCap: 1, integrations: [] }).success,
+    FrameSchema.safeParse({ type: 'capabilities', brain: 'lmstudio', daemon: 'k', version: '1', injectCap: 1, integrations: [] }).success,
     false,
   );
 });
@@ -267,7 +269,7 @@ test('protocol: a stats frame round-trips; metric fields are optional', () => {
     FrameSchema.safeParse({
       type: 'stats',
       id: 'u1',
-      brain: 'local',
+      brain: 'lmstudio',
       model: 'qwen2.5:7b-instruct-q4_K_M',
       promptTokens: 120,
       outputTokens: 40,
@@ -283,9 +285,9 @@ test('protocol: a stats frame round-trips; metric fields are optional', () => {
   // a minimal stats frame (only id + brain) — all metrics omitted
   assert.equal(FrameSchema.safeParse({ type: 'stats', id: 'u2', brain: 'cloud' }).success, true);
   // missing id is rejected
-  assert.equal(FrameSchema.safeParse({ type: 'stats', brain: 'local' }).success, false);
+  assert.equal(FrameSchema.safeParse({ type: 'stats', brain: 'lmstudio' }).success, false);
   // a non-numeric token count is rejected
-  assert.equal(FrameSchema.safeParse({ type: 'stats', id: 'u3', brain: 'local', outputTokens: 'lots' }).success, false);
+  assert.equal(FrameSchema.safeParse({ type: 'stats', id: 'u3', brain: 'lmstudio', outputTokens: 'lots' }).success, false);
 });
 
 test('protocol: a speak frame carrying cues[] + onFinish round-trips (the frozen SpeakSchema)', () => {

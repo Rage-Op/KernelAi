@@ -13,7 +13,7 @@
 import { config } from '../config.js';
 import { injectReport, type InjectReport } from '../memory/inject.js';
 import { currentBrainSelection } from '../settings.js';
-import { OLLAMA_MODEL, OLLAMA_NUM_CTX } from '../brain/LocalBrain.js';
+import { GEN_NUM_CTX } from '../brain/persona.js';
 import { CLAUDE_MODEL } from '../brain/ClaudeBrain.js';
 import { snapshot } from './session-usage.js';
 import { bar, commas, estTokens } from './format.js';
@@ -32,18 +32,17 @@ function renderModelWindow(): string[] {
   const brain = currentBrainSelection();
   const snap = snapshot();
   const lines: string[] = [];
-  // Both local engines (Ollama `local` + LM Studio `lmstudio`) run on-device — only `cloud` is remote.
+  // The local engine (`lmstudio`) runs on-device — only `cloud` is remote.
   if (brain !== 'cloud') {
-    // lastModel already reflects the engine's actual loaded model (LM Studio reports its tag per turn).
-    const model = snap.lastModel ?? OLLAMA_MODEL;
-    const engine = brain === 'lmstudio' ? 'lm studio' : 'local';
-    // OLLAMA_NUM_CTX is the Ollama window; for LM Studio it's a generic local default (the real window
-    // depends on how the model was loaded) — still vastly closer than the 1M cloud constant.
-    lines.push(`Model window — ${engine} · ${model} · ${commas(OLLAMA_NUM_CTX)} tok`);
+    // lastModel already reflects LM Studio's actual loaded model (it reports its tag per turn).
+    const model = snap.lastModel ?? 'local model';
+    // GEN_NUM_CTX is a generic local default; LM Studio's real window depends on how the model was
+    // loaded — still vastly closer than the 1M cloud constant.
+    lines.push(`Model window — lm studio · ${model} · ${commas(GEN_NUM_CTX)} tok`);
     if (typeof snap.lastPromptTokens === 'number') {
       lines.push(
         `  last turn used ${commas(snap.lastPromptTokens)} prompt tok  ` +
-          bar(snap.lastPromptTokens, OLLAMA_NUM_CTX, 14),
+          bar(snap.lastPromptTokens, GEN_NUM_CTX, 14),
       );
     } else {
       lines.push('  (no turn measured yet this session)');

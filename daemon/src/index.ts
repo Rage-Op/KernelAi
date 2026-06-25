@@ -3,9 +3,9 @@
  *
  * Two modes:
  *   - `--heartbeat`  → run the short-lived heartbeat job (append a dated line) and exit.
- *   - default        → run startup guards, then start the UDS IPC server + the loop and
- *                      stay resident (the open socket keeps the process alive — NO polling
- *                      timer). launchd (RunAtLoad + KeepAlive) owns relaunch-at-login.
+ *   - default        → run startup guards, then start the daemon-hosted WEB face transport (HTTP+SSE)
+ *                      + the loop and stay resident (the listening HTTP server keeps the process alive —
+ *                      NO polling timer). launchd (RunAtLoad + KeepAlive) owns relaunch-at-login.
  *
  * Startup guards (fail loud — the daemon refuses to serve if either trips):
  *   1. IDENTITY integrity: baseline the SHA-256 on first run, then verify on every start;
@@ -18,8 +18,7 @@ import { logger } from './memory/log.js';
 import { bootBuildStamp } from './build-stamp.js';
 import { baselineIdentityHash, readIdentityVerified } from './memory/identity.js';
 import {
-  startIpcServer,
-  probeDaemonAlive,
+  wireBroadcasts,
   broadcastBrowser,
   anyBrowserViewers,
   setBrowserViewSync,
@@ -93,13 +92,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
   runStartupGuards();
 
-  // SINGLE-INSTANCE GUARD — two layers, because the socket alone is not enough:
-  //
-  // (1) PID LOCK (authoritative). A daemon can be ALIVE yet UNREACHABLE — its socket file was
-  //     unlink()ed while it still holds the bound fd, so a connect-probe wrongly reports "no daemon"
-  //     and a 2nd/3rd daemon starts and clobbers the socket (the "Face gets no output" bug). The PID
-  //     lock catches a live daemon REGARDLESS of socket state: if another live pid holds the lock we
-  //     exit; a stale lock (dead pid, e.g. after kill -9) is stolen and we take over.
+  // SINGLE-INSTANCE GUARD — the PID LOCK (authoritative). A daemon can be ALIVE yet otherwise hard to
+  // detect, so a connect/port probe is unreliable; the PID lock catches a live daemon regardless. If
+  // another live resident KERNEL daemon holds the lock we exit; a stale lock (dead pid, e.g. after
+  // kill -9) is stolen and we take over. (The web server's own bind on :7777 is the secondary guard —
+  // a second daemon would fail to bind the port and exit loud.)
   const lock = acquireSingleInstanceLock();
   if (!lock.acquired) {
     logger.warn(
@@ -107,15 +104,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       'another KERNEL daemon already holds the single-instance lock — exiting (PID guard)',
     );
     process.exit(0);
-  }
-  // (2) SOCKET PROBE (secondary). Covers a legacy/other daemon that predates the PID lock and is
-  //     still listening; `startIpc` would otherwise unlink-and-steal its socket.
-  if (await probeDaemonAlive(config.socketPath)) {
-    logger.warn(
-      { socketPath: config.socketPath },
-      'another KERNEL daemon is already listening — exiting (single-instance guard)',
-    );
-    process.exit(0); // releases our just-acquired lock via the registered exit handler
   }
 
   // Register the built-in tools (HANDS-04) so the brain can dispatch them and the capabilities
@@ -129,11 +117,16 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   setBrowserViewSync(() => {
     void syncScreencast();
   });
+  // Wire the server→client broadcast seams (Red breaker preview + model warm-up readiness) to the shared
+  // broadcast() BEFORE the web server starts, so a client connecting mid-warm-up still sees progress.
+  // (This wiring previously lived inside the UDS startIpc(); the web transport owns the socket now.)
+  wireBroadcasts();
   // Choose the active brain. A persisted owner choice wins; otherwise default to the LOCAL brain
-  // (qwen3.5 via Ollama) so a never-toggled owner gets a real, offline-capable, tool-using brain
-  // out of the box — NOT the StubBrain placeholder or a keyless cloud brain (the "it's dumb /
-  // won't use tools" report). persist=false: the value already came from disk (or is the default).
-  applySettings(loadPersistedBrain() ?? 'local', false);
+  // (LM Studio) so a never-toggled owner gets a real, offline-capable, tool-using brain out of the
+  // box — NOT the StubBrain placeholder or a keyless cloud brain (the "it's dumb / won't use tools"
+  // report). A persisted Ollama `local` choice is migrated to `lmstudio` on load. persist=false: the
+  // value already came from disk (or is the default).
+  applySettings(loadPersistedBrain() ?? 'lmstudio', false);
   // Restore the owner's persisted SAFETY posture (SAFE-08): the Red breaker on/off flag, the daily
   // spend ceiling, and the /override default TTL. Syncs the live gate flag (FLAGS.breakerEnabled) so
   // the gate honours the owner's choice; a fresh install keeps the safe env/default (breaker OFF).
@@ -142,12 +135,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // across daemon restarts (the persisted-chat-history fix). Only turns after the last /clear are
   // restored. Best-effort; an absent/empty log just starts fresh.
   conversation.load();
-  const ipc = await startIpcServer();
-  // Start the daemon-hosted WEB Face transport (HTTP + SSE on 127.0.0.1). Speaks the SAME frame contract
-  // as the UDS Face, so the gate/loop/tools are preserved. Best-effort: a bind failure (port in use) is
-  // logged but does NOT take the daemon down — the UDS Face still works. The launcher URL (with the
-  // single-use-ish token) is logged so `kernel up` can surface it to the owner.
-  let web: Awaited<ReturnType<typeof startWebServer>> | null = null;
+  // Start the daemon-hosted WEB Face transport (HTTP + SSE on 127.0.0.1) — now the SOLE transport.
+  // It bridges the frozen frame contract into the loop/gate (gate/tools/MCP/memory preserved). If it
+  // can't bind (e.g. the port is held by a non-KERNEL process), the daemon has no UI and no reason to
+  // stay resident, so fail loud and let launchd relaunch.
+  let web: Awaited<ReturnType<typeof startWebServer>>;
   try {
     web = await startWebServer();
     // SECURITY: never log web.url — it embeds the secret token, and this line is captured into
@@ -157,16 +149,20 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       'KERNEL web face online — run `./kernel-up.sh` (or read the web-token file) to open it',
     );
   } catch (err) {
-    logger.error(
+    logger.fatal(
       { err: err instanceof Error ? err.message : String(err) },
-      'web face failed to start (UDS Face unaffected)',
+      'web face failed to start — no transport available, exiting',
     );
+    process.stderr.write(
+      `[index] FATAL: web face failed to start: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exit(1);
   }
   // Log exactly which build is live (MAINT-04) — so "am I running stale code?" is answerable from
   // the logs, and the connection-time staleness check has a baseline to compare against.
   logger.info(
-    { socketPath: config.socketPath, build: bootBuildStamp() },
-    'KERNEL daemon online — IPC listening',
+    { addr: `http://127.0.0.1:${web.port}`, build: bootBuildStamp() },
+    'KERNEL daemon online — web face listening',
   );
 
   // BRAIN-07: start warming the active model the moment we're online — by the time the Face connects
@@ -175,11 +171,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // progress broadcasts as `model.state` frames; a warm-up failure resolves to `error` (never throws).
   void warmupActiveBrain(currentBrainSelection());
 
-  // Keep the process resident; gracefully close the socket on termination signals.
+  // Keep the process resident; gracefully close the web server on termination signals.
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'KERNEL daemon shutting down');
-    const closeWeb = web ? web.close().catch(() => {}) : Promise.resolve();
-    void Promise.all([ipc.close().catch(() => {}), closeWeb]).finally(() => process.exit(0));
+    void web.close().catch(() => {}).finally(() => process.exit(0));
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));

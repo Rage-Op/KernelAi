@@ -6,11 +6,11 @@
  * cheap high-frequency turns: `triage()` (importance/urgency tagging), `classify()` (pick a
  * label from a set), `narrate()` (a short filler line while the cloud thinks).
  *
- * It always hits Ollama (`/api/chat`, same pinned model as LocalBrain) and is ABSENT-TOLERANT:
- * when the Ollama call rejects (Ollama not running on this machine) every function returns a
- * NEUTRAL DEFAULT and NEVER throws — it must never block the loop (RESEARCH.md Pattern 4).
+ * It hits the local **LM Studio** server (the same engine the main brain uses) and is ABSENT-TOLERANT:
+ * when LM Studio is unreachable or has no model loaded, every function returns a NEUTRAL DEFAULT and
+ * NEVER throws — it must never block the loop (RESEARCH.md Pattern 4).
  */
-import { OLLAMA_CHAT_URL, OLLAMA_MODEL } from './LocalBrain.js';
+import { LMSTUDIO_CHAT_URL, resolveLmStudioModel } from './LMStudioBrain.js';
 
 /** A triage verdict for a short message. Neutral default = unflagged, normal priority. */
 export interface Triage {
@@ -18,44 +18,50 @@ export interface Triage {
   urgency: 'low' | 'normal' | 'high';
 }
 
-/** The neutral triage default returned when Ollama is absent or the reply is unusable. */
+/** The neutral triage default returned when LM Studio is absent or the reply is unusable. */
 const NEUTRAL_TRIAGE: Triage = { important: false, urgency: 'normal' };
 
 /**
- * Hit Ollama `/api/chat` once and return the assistant's text content, or null on any failure
- * (unreachable, non-ok, empty). Never throws — absence is a null, not an exception.
+ * Hit the LM Studio server once (OpenAI `/v1/chat/completions`) and return the assistant's text
+ * content, or null on any failure (no model loaded, unreachable, non-ok, empty). Never throws —
+ * absence is a null, not an exception.
  */
 async function ask(system: string, user: string): Promise<string | null> {
+  // Resolve whatever model LM Studio currently has loaded; null (server down / nothing loaded) → the
+  // neutral default upstream. resolveLmStudioModel is itself absent-tolerant (never throws).
+  const model = await resolveLmStudioModel(fetch);
+  if (!model) return null;
   let res: Response;
   try {
-    res = await fetch(OLLAMA_CHAT_URL, {
+    res = await fetch(LMSTUDIO_CHAT_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
         stream: false,
-        // The helper is a FAST classifier — thinking must be OFF. qwen3.5 is thinking-capable and
-        // would otherwise emit slow <think> chains that both delay the answer AND wrap the expected
-        // JSON/label (breaking the parse). think:false keeps it a crisp one-shot tag.
-        think: false,
-        options: { temperature: 0.1, num_ctx: 4096 },
-        // keep_alive OMITTED — never -1 (16GB idle-unload).
+        // The helper is a FAST classifier — keep temperature low and the budget modest. A reasoning
+        // model may emit a brief private chain first, but the parsed `content` still carries the crisp
+        // JSON/label; a generous-enough max_tokens leaves room for both so content is never truncated.
+        temperature: 0.1,
+        max_tokens: 1024,
       }),
     });
   } catch {
-    return null; // Ollama unreachable → neutral default upstream.
+    return null; // LM Studio unreachable → neutral default upstream.
   }
   if (!res.ok) return null;
-  const body = (await res.json().catch(() => null)) as { message?: { content?: string } } | null;
-  return body?.message?.content ?? null;
+  const body = (await res.json().catch(() => null)) as
+    | { choices?: { message?: { content?: string } }[] }
+    | null;
+  return body?.choices?.[0]?.message?.content ?? null;
 }
 
 /**
- * Tag a short message's importance/urgency. Returns the neutral default when Ollama is absent
+ * Tag a short message's importance/urgency. Returns the neutral default when LM Studio is absent
  * or the model output cannot be parsed. Never throws.
  */
 export async function triage(message: string): Promise<Triage> {
@@ -75,7 +81,7 @@ export async function triage(message: string): Promise<Triage> {
 
 /**
  * Pick the best-fitting label from `labels` for `text`. Returns the FIRST label as the neutral
- * default when Ollama is absent or the reply is not one of the offered labels. Never throws.
+ * default when LM Studio is absent or the reply is not one of the offered labels. Never throws.
  */
 export async function classify(text: string, labels: string[]): Promise<string> {
   const fallback = labels[0] ?? '';
@@ -90,7 +96,7 @@ export async function classify(text: string, labels: string[]): Promise<string> 
 
 /**
  * Produce a short narration line for `topic` (e.g. a filler while the cloud thinks). Returns an
- * empty string as the neutral default when Ollama is absent. Never throws.
+ * empty string as the neutral default when LM Studio is absent. Never throws.
  */
 export async function narrate(topic: string): Promise<string> {
   const reply = await ask(

@@ -1,18 +1,14 @@
 /**
  * The FROZEN IPC frame contract (CORE-04).
  *
- * Transport is a Unix-domain socket carrying newline-delimited JSON (NDJSON):
- * each frame is one `JSON.stringify(frame) + '\n'`. This file is the single source
- * of truth the Swift Face mirrors; it is authored transport-agnostic so the shape is
- * stable across phases.
+ * Authored transport-agnostic. The transport today is the daemon-hosted web Face: frames flow as SSE
+ * `data:` events (daemon→web) and JSON POST bodies (web→daemon) — see `web/http-server.ts`. The web Face
+ * (`webface/src/frames.ts`) mirrors the subset it uses; this file is the single source of truth. (The
+ * original Unix-domain-socket / NDJSON transport for the removed SwiftUI Mac app is gone — see git history.)
  *
- * Phase 1 EXERCISES: hello / utterance / ping (Face→daemon) and ready / reply / pong /
- * error (daemon→Face). The Phase 2/3 shapes (speak{cues,onFinish}, widget.data,
- * ui.intent) are authored here so the contract is frozen now, but are NOT used in P1.
- *
- * Every frame validates against `FrameSchema` (a zod discriminated union on `type`).
- * A malformed/invalid line never crashes the daemon — the server replies with an
- * `error` frame instead (T-01-09).
+ * Many "Face→daemon" / "daemon→Face" arms below were authored across earlier phases; "Face" now means the
+ * web Face. Every frame validates against `FrameSchema` (a zod discriminated union on `type`). A
+ * malformed/invalid frame never crashes the daemon — the router replies with an `error` frame (T-01-09).
  */
 import { z } from 'zod';
 
@@ -49,13 +45,13 @@ export const UiIntentSchema = z.object({
 
 /**
  * P3 ADDITIVE arm (CLOUD-01): the Settings brain toggle (Face→daemon). Selecting
- * `local` swaps the active brain to LocalBrain (Ollama) via `loop.setBrain`; `cloud`
- * swaps to ClaudeBrain. The always-on 7B helper runs regardless of this toggle.
+ * `lmstudio` swaps the active brain to the LOCAL LMStudioBrain via `loop.setBrain`;
+ * `cloud` swaps to ClaudeBrain. The always-on helper runs regardless of this toggle.
  * Appended to the frozen FrameSchema union — existing arms are NEVER mutated.
  */
 export const SettingsSchema = z.object({
   type: z.literal('settings'),
-  brain: z.enum(['cloud', 'local', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio']),
 });
 
 // --- daemon → Face -------------------------------------------------------------
@@ -140,7 +136,7 @@ export const ErrorSchema = z.object({
  */
 export const CapabilitiesSchema = z.object({
   type: z.literal('capabilities'),
-  brain: z.enum(['cloud', 'local', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio']),
   daemon: z.string(),
   version: z.string(),
   /** The memory-injection context cap in characters (config.injectCap). */
@@ -160,7 +156,7 @@ export const CapabilitiesSchema = z.object({
 export const StatsSchema = z.object({
   type: z.literal('stats'),
   id: z.string(),
-  brain: z.enum(['cloud', 'local', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio']),
   model: z.string().optional(),
   promptTokens: z.number().optional(),
   outputTokens: z.number().optional(),
@@ -416,7 +412,7 @@ export const AuditDataSchema = z.object({
 export const ModelStateSchema = z.object({
   type: z.literal('model.state'),
   status: z.enum(['loading', 'ready', 'error']),
-  brain: z.enum(['cloud', 'local', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio']),
   model: z.string().optional(),
   detail: z.string().optional(),
 });
@@ -463,7 +459,7 @@ export const BrowserViewSchema = z.object({
 
 /**
  * ADDITIVE arm (web→daemon): request the live status of the background services KERNEL depends on
- * (Ollama, LM Studio, the Playwright browser, stray duplicate daemons), so the web Face can show a
+ * (LM Studio, the Playwright browser, stray duplicate daemons), so the web Face can show a
  * mini control panel. Correlated to `service.data` by `id`. Appended to the frozen union.
  */
 export const ServiceListSchema = z.object({
@@ -505,6 +501,60 @@ export const ServiceDataSchema = z.object({
 });
 
 /**
+ * ADDITIVE arm (web→daemon): request the list of LM Studio models (downloaded + loaded) so the web
+ * Face can render a model-control panel. Talks to LM Studio's native `/api/v1/models`. Correlated to
+ * `lmstudio.data` by `id`. Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const LmStudioListSchema = z.object({
+  type: z.literal('lmstudio.list'),
+  id: z.string(),
+});
+
+/**
+ * ADDITIVE arm (web→daemon): load or unload ONE LM Studio model (owner-only, over the token-gated
+ * localhost server — never the model's gated tools). `key` is the model key as `lmstudio.data` reports
+ * it (the daemon refuses a key LM Studio doesn't list); `contextLength` is an optional load-time context
+ * window. The daemon replies with a fresh `lmstudio.data` (same `id`) reflecting the new state.
+ */
+export const LmStudioActionSchema = z.object({
+  type: z.literal('lmstudio.action'),
+  id: z.string(),
+  action: z.enum(['load', 'unload']),
+  key: z.string(),
+  contextLength: z.number().optional(),
+});
+
+/**
+ * ADDITIVE arm (daemon→web): the LM Studio model inventory for the web Face's control panel. `serverUp`
+ * is whether LM Studio's server answered; `active` is the key the daemon's resolver would currently
+ * drive; `note` is a short status/outcome line (e.g. a load result or an error). Each model carries its
+ * loaded state, sizes, max + loaded context, and capabilities. Sent in reply to `lmstudio.list`/
+ * `lmstudio.action` (same `id`). Appended to the frozen union — existing arms are NEVER mutated.
+ */
+export const LmStudioDataSchema = z.object({
+  type: z.literal('lmstudio.data'),
+  id: z.string().optional(),
+  serverUp: z.boolean(),
+  active: z.string().optional(),
+  note: z.string().optional(),
+  models: z.array(
+    z.object({
+      key: z.string(),
+      displayName: z.string(),
+      format: z.string().optional(),
+      sizeBytes: z.number().optional(),
+      paramsString: z.string().optional(),
+      maxContextLength: z.number().optional(),
+      loaded: z.boolean(),
+      loadedContextLength: z.number().optional(),
+      instanceId: z.string().optional(),
+      reasoning: z.boolean().optional(),
+      toolUse: z.boolean().optional(),
+    }),
+  ),
+});
+
+/**
  * The frozen frame contract: a discriminated union on `type` over every P1 frame
  * plus the designed-for P2/P3/P4/P5 shapes. `safeParse` every incoming line against this.
  */
@@ -523,6 +573,8 @@ export const FrameSchema = z.discriminatedUnion('type', [
   BrowserViewSchema, // additive (web→daemon subscribe/unsubscribe the live browser screencast)
   ServiceListSchema, // additive (web→daemon request background-service status)
   ServiceActionSchema, // additive (web→daemon stop/restart an allowlisted background service)
+  LmStudioListSchema, // additive (web→daemon request the LM Studio model inventory)
+  LmStudioActionSchema, // additive (web→daemon load/unload an LM Studio model)
   // daemon → Face
   ReadySchema,
   ReplySchema,
@@ -548,6 +600,7 @@ export const FrameSchema = z.discriminatedUnion('type', [
   BrowserFrameSchema, // additive (daemon→web live browser screencast frame)
   BrowserStateSchema, // additive (daemon→web browser high-level state for the screencast pane)
   ServiceDataSchema, // additive (daemon→web background-service status for the control panel)
+  LmStudioDataSchema, // additive (daemon→web LM Studio model inventory for the control panel)
 ]);
 
 /** Any valid frame. */
@@ -591,6 +644,9 @@ export type BrowserView = z.infer<typeof BrowserViewSchema>;
 export type ServiceList = z.infer<typeof ServiceListSchema>;
 export type ServiceAction = z.infer<typeof ServiceActionSchema>;
 export type ServiceData = z.infer<typeof ServiceDataSchema>;
+export type LmStudioList = z.infer<typeof LmStudioListSchema>;
+export type LmStudioAction = z.infer<typeof LmStudioActionSchema>;
+export type LmStudioData = z.infer<typeof LmStudioDataSchema>;
 
 /**
  * Every frame has a `type` and an optional correlation `id`. The structural minimum

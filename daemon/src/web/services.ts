@@ -1,7 +1,7 @@
 /**
  * services.ts — the daemon-side control plane for the web Face's "background services" panel.
  *
- * Lets the owner see + stop the background pieces KERNEL leans on: Ollama, the LM Studio server, the
+ * Lets the owner see + stop the background pieces KERNEL leans on: the LM Studio server, the
  * Playwright browser, and any STRAY duplicate KERNEL daemons (the old multi-instance footgun). This is
  * a CONTROL surface, not a model capability — it is reached only over the token-gated, loopback-bound
  * web server by the owner, never by the model's gated `shell` tool. Even so it is hard-allowlisted: only
@@ -69,12 +69,7 @@ async function strayDaemonPids(): Promise<number[]> {
 
 /** The live status of every controllable background service. */
 export async function listServices(): Promise<ServiceInfo[]> {
-  const [ollamaUp, lmsUp, ollamaPids, strays] = await Promise.all([
-    probePort(11434),
-    probePort(1234),
-    pgrepPids('[o]llama'),
-    strayDaemonPids(),
-  ]);
+  const [lmsUp, strays] = await Promise.all([probePort(1234), strayDaemonPids()]);
   const page = livePageOrNull();
   let browserUrl = 'closed';
   if (page) {
@@ -85,14 +80,6 @@ export async function listServices(): Promise<ServiceInfo[]> {
     }
   }
   return [
-    {
-      name: 'ollama',
-      label: 'Ollama — local model server',
-      running: ollamaUp,
-      pid: ollamaPids[0],
-      detail: ollamaUp ? 'listening on :11434' : 'not running',
-      actions: ollamaUp ? ['stop'] : [],
-    },
     {
       name: 'lmstudio',
       label: 'LM Studio — model server',
@@ -124,12 +111,6 @@ export async function listServices(): Promise<ServiceInfo[]> {
 export async function runServiceAction(name: string, action: string): Promise<string> {
   if (action !== 'stop') return `unsupported action: ${action}`;
   switch (name) {
-    case 'ollama': {
-      await run('pkill', ['-x', 'ollama']);
-      await run('pkill', ['-f', 'ollama runner']);
-      logger.info({ service: 'ollama' }, 'service stopped via web control');
-      return 'Ollama stopped';
-    }
     case 'lmstudio': {
       const { code, out } = await run(LMS, ['server', 'stop']);
       logger.info({ service: 'lmstudio', code }, 'lm studio server stop requested');

@@ -13,6 +13,10 @@
  * Test seam: `__setClientForTest(mock)` injects a mock client (mirrors tools/peekaboo.ts),
  * so unit tests run with NO live ANTHROPIC_API_KEY / network. The real client is created
  * lazily from the env key (T-03-03: the key is read from env only, never logged/persisted).
+ *
+ * ABSENT-TOLERANT (mirrors LMStudioBrain): a missing API key, a network failure, or any SDK error
+ * returns a TYPED ESCALATION Decision with an actionable reply — it NEVER throws across the loop
+ * boundary (an unhandled throw here would crash the whole daemon).
  */
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -64,6 +68,19 @@ function getClient(): ClaudeClient {
   return client;
 }
 
+/** Turn an SDK/auth/network failure into a typed escalation Decision (never thrown across the loop). */
+function claudeErrorDecision(err: unknown): Decision {
+  const m = err instanceof Error ? err.message : String(err);
+  const auth = /authenticat|api[_\s-]?key|x-api-key|401|unauthorized|credential|resolve authentication/i.test(m);
+  return {
+    thought: `cloud brain error: ${m.slice(0, 140)}`,
+    reply: auth
+      ? 'Cloud brain (Claude) is unavailable — no API key is configured. Add `export ANTHROPIC_API_KEY=…` ' +
+        'to ~/.kernel.env and restart the daemon, or switch the engine to LM Studio in Settings.'
+      : `Cloud brain (Claude) hit an error (${m.slice(0, 80)}). Check the network / API key, or switch to LM Studio.`,
+  };
+}
+
 /** Concatenate all text blocks of a message into one string (the "thought"/reply text). */
 function textOf(msg: ClaudeMessage): string {
   return msg.content
@@ -80,13 +97,19 @@ export class ClaudeBrain implements BrainProvider {
     _onToken?: (chunk: string) => void,
     history?: ChatTurn[],
   ): Promise<Decision> {
-    const msg = await getClient().messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: context, // IDENTITY + memory the loop's inject() assembled (stays the system prompt)
-      // prior dialogue turns precede the current utterance so Claude can follow up across prompts.
-      messages: [...(history ?? []), { role: 'user', content: prompt }],
-    });
+    let msg: ClaudeMessage;
+    try {
+      msg = await getClient().messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: MAX_TOKENS,
+        system: context, // IDENTITY + memory the loop's inject() assembled (stays the system prompt)
+        // prior dialogue turns precede the current utterance so Claude can follow up across prompts.
+        messages: [...(history ?? []), { role: 'user', content: prompt }],
+      });
+    } catch (err) {
+      // Missing key / network / SDK error → a typed escalation, NOT a thrown daemon crash.
+      return claudeErrorDecision(err);
+    }
 
     // MANUAL tool loop (BRAIN-06): a tool_use turn returns ONE action; the loop gates+runs it.
     if (msg.stop_reason === 'tool_use') {

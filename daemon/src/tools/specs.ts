@@ -91,7 +91,7 @@ export function localToolSpecs(): OllamaToolSpec[] {
               enum: ['read', 'list', 'stat', 'write', 'edit', 'mkdir', 'move', 'delete'],
               description: 'read/list/stat are safe reads; write/edit/mkdir/move change files; delete needs approval',
             },
-            path: { type: 'string', description: 'the target file or directory path' },
+            path: { type: 'string', description: 'the target file or directory path (omit for list/stat to use your workspace)' },
             content: { type: 'string', description: 'full file contents (op=write)' },
             find: { type: 'string', description: 'exact text to replace (op=edit)' },
             replace: { type: 'string', description: 'replacement text (op=edit)' },

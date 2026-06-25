@@ -1,11 +1,11 @@
 /**
  * http-server.ts — the daemon-hosted WEB Face transport.
  *
- * Serves the prebuilt `webface/dist/` SPA and bridges a browser to the SAME frame contract the Mac
- * Face speaks over the Unix socket. Because `defaultFrameHandler` is transport-agnostic (it only ever
- * calls `send(conn, frame)`), a web client is just another `ClientConn`: every utterance still flows
- * `routeFrame → defaultFrameHandler → enqueue → loop → dispatch → GATE`. The gate, tools, MCP,
- * meta-commands, and /override are preserved unchanged — the web UI gains nothing the gate doesn't allow.
+ * Serves the prebuilt `webface/dist/` SPA and bridges a browser into the daemon's frozen frame contract.
+ * Because `defaultFrameHandler` is transport-agnostic (it only ever calls `send(conn, frame)`), a web
+ * client is just a `ClientConn`: every utterance flows `routeFrame → defaultFrameHandler → enqueue →
+ * loop → dispatch → GATE`. The gate, tools, MCP, meta-commands, and /override are preserved unchanged —
+ * the web UI gains nothing the gate doesn't allow. This is the daemon's SOLE transport.
  *
  * Transport (zero new dependencies, robust, native browser auto-reconnect):
  *   - GET  /events  → Server-Sent Events: the daemon→client push channel (ready, say, reasoning,
@@ -42,6 +42,7 @@ import {
 } from '../ipc/server.js';
 import { getOrCreateWebToken, validateWebToken, webTokenPath } from './web-token.js';
 import { logger } from '../memory/log.js';
+import { exitIfStale } from '../build-stamp.js';
 
 const HOST = '127.0.0.1';
 /** Max POST body — frames are tiny; a 256KB cap stops a local process from ballooning memory. */
@@ -145,6 +146,10 @@ function handleEvents(req: http.IncomingMessage, res: http.ServerResponse, url: 
     res.end('bad origin');
     return;
   }
+  // MAINT-04: if dist was rebuilt since this process booted, a launchd-owned daemon exits here (after
+  // auth) so launchd relaunches it on the fresh code. A no-op unless genuinely stale; in dev/test (no
+  // build stamp) it never triggers. Previously ran on each UDS connect; now on each authenticated SSE connect.
+  exitIfStale(logger);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
@@ -185,7 +190,7 @@ function handleEvents(req: http.IncomingMessage, res: http.ServerResponse, url: 
   webClients.set(clientId, conn);
   // First event tells the client its id so its POSTs correlate to THIS stream (custom `hello` event).
   res.write(`event: hello\ndata: ${JSON.stringify({ clientId })}\n\n`);
-  // Same on-connect snapshot the Mac Face gets (ready + capabilities + control-surface + model state).
+  // The on-connect snapshot (ready + capabilities + control-surface + model state).
   sendConnectFrames(conn);
 
   const keepAlive = setInterval(() => {
@@ -252,8 +257,8 @@ async function handleFrame(req: http.IncomingMessage, res: http.ServerResponse, 
     delete (parsed as Record<string, unknown>).clientId;
     delete (parsed as Record<string, unknown>).token;
   }
-  // SAME validation + routing as the UDS line reader (shared routeFrame). Replies/says/etc. stream back
-  // over the client's SSE channel via conn.send.
+  // Validation + routing via the shared routeFrame. Replies/says/etc. stream back over the client's SSE
+  // channel via conn.send.
   routeFrame(parsed, conn);
   res.writeHead(204);
   res.end();

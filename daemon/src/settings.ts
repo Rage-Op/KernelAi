@@ -1,32 +1,32 @@
 /**
- * settings.ts — the brain=cloud|local Settings path.
+ * settings.ts — the brain=cloud|lmstudio Settings path.
  *
  * `applySettings(brain)` swaps the ACTIVE brain via the EXISTING `loop.setBrain` seam — it does
- * NOT touch the loop's queue/drain/gate semantics. `local` → LocalBrain (Ollama), `cloud` →
- * ClaudeBrain (the default). The always-on 7B helper (`brain/helper.ts`) is a standalone module,
- * NOT a BrainProvider, and runs regardless of this toggle (BRAIN-03 / BRAIN-05).
+ * NOT touch the loop's queue/drain/gate semantics. `lmstudio` → LMStudioBrain (the LOCAL engine —
+ * LM Studio's OpenAI-compatible server, runs MLX or GGUF), `cloud` → ClaudeBrain. The always-on
+ * helper (`brain/helper.ts`) is a standalone module, NOT a BrainProvider, and runs regardless of
+ * this toggle (BRAIN-03 / BRAIN-05). (The former Ollama `local` engine was removed — a persisted
+ * `local` choice is migrated to `lmstudio` on load.)
  *
  * Wired into the IPC path additively: the server's `settings` frame arm calls `applySettings`.
  *
  * Persistence (CLOUD-01): the selection is written to a tiny JSON file in the daemon's
- * Application Support dir (the same dir that holds the UDS socket) — NOT the git-backed memory
- * repo, because it is a UI preference, not a memory, and must never be backed up. On daemon
- * startup `restorePersistedBrain()` re-applies the saved choice so a launchd relaunch keeps the
- * owner's brain. The file path is injectable so tests never touch the real Application Support dir
- * (mirrors safety/spend-ledger.ts).
+ * Application Support dir — NOT the git-backed memory repo, because it is a UI preference, not a
+ * memory, and must never be backed up. On daemon startup `restorePersistedBrain()` re-applies the
+ * saved choice so a launchd relaunch keeps the owner's brain. The file path is injectable so tests
+ * never touch the real Application Support dir (mirrors safety/spend-ledger.ts).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { setBrain } from './loop.js';
 import { ClaudeBrain } from './brain/ClaudeBrain.js';
-import { LocalBrain } from './brain/LocalBrain.js';
 import { LMStudioBrain } from './brain/LMStudioBrain.js';
 import { config } from './config.js';
 import { logger } from './memory/log.js';
 
-/** The brain selection surfaced by the Settings toggle. `lmstudio` is a second LOCAL engine (LM
- *  Studio's OpenAI-compatible server) that, unlike Ollama, can run MLX models on Apple Silicon. */
-export type BrainSelection = 'cloud' | 'local' | 'lmstudio';
+/** The brain selection surfaced by the Settings toggle: the LOCAL engine (`lmstudio` — LM Studio's
+ *  OpenAI-compatible server, MLX or GGUF) or `cloud` (Claude). */
+export type BrainSelection = 'cloud' | 'lmstudio';
 
 /** The current Settings selection. ClaudeBrain (cloud) is the default (BRAIN-02). */
 let currentBrain: BrainSelection = 'cloud';
@@ -43,8 +43,8 @@ export function __setBrainPrefPathForTest(p: string | null): void {
 }
 
 /**
- * Where the brain preference persists across daemon restarts: `brain.json` next to the UDS
- * socket (the daemon's Application Support dir), NOT the memory repo (never backed up).
+ * Where the brain preference persists across daemon restarts: `brain.json` in the daemon's
+ * Application Support dir, NOT the memory repo (never backed up).
  */
 function brainPrefPath(): string {
   return prefPathOverride ?? path.join(path.dirname(config.socketPath), 'brain.json');
@@ -73,9 +73,9 @@ function persistBrain(brain: BrainSelection): void {
 export function loadPersistedBrain(): BrainSelection | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(brainPrefPath(), 'utf8')) as { brain?: unknown };
-    if (parsed.brain === 'local' || parsed.brain === 'cloud' || parsed.brain === 'lmstudio') {
-      return parsed.brain;
-    }
+    if (parsed.brain === 'cloud' || parsed.brain === 'lmstudio') return parsed.brain;
+    // Migrate a previously-persisted Ollama `local` choice to LM Studio (the local engine now).
+    if (parsed.brain === 'local') return 'lmstudio';
   } catch {
     // absent / unreadable / corrupt → no persisted choice
   }
@@ -90,13 +90,7 @@ export function loadPersistedBrain(): BrainSelection | null {
  */
 export function applySettings(brain: BrainSelection, persist = true): void {
   currentBrain = brain;
-  setBrain(
-    brain === 'local'
-      ? new LocalBrain()
-      : brain === 'lmstudio'
-        ? new LMStudioBrain()
-        : new ClaudeBrain(),
-  );
+  setBrain(brain === 'lmstudio' ? new LMStudioBrain() : new ClaudeBrain());
   if (persist) persistBrain(brain);
 }
 

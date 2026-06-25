@@ -1,5 +1,5 @@
 /**
- * LMStudioBrain.ts — a local brain backed by **LM Studio** (BRAIN-03 sibling of LocalBrain).
+ * LMStudioBrain.ts — KERNEL's LOCAL brain, backed by **LM Studio** (BRAIN-03).
  *
  * Selectable from Settings (`brain=lmstudio`). It talks to LM Studio's **OpenAI-compatible** server
  * (`http://localhost:1234/v1/chat/completions`) instead of Ollama's native API, which is what lets the
@@ -7,9 +7,9 @@
  * Studio does not. The reasoning, tool loop, gate, memory, and MCP are all KERNEL-side and UNCHANGED:
  * this class only swaps the transport, so the model orchestrates everything exactly the same.
  *
- * It deliberately REUSES LocalBrain's persona, depth gating, tool catalog, and tool-loop shape (a
- * single source of truth — the SYSTEM_PROMPT and `localToolSpecs()` are imported, never duplicated, so
- * the two local brains never drift). The only real differences from LocalBrain are OpenAI wire shapes:
+ * It draws its persona, depth gating, tool-loop shape, and generation budget from the engine-neutral
+ * `persona.ts` (the single source of truth — SYSTEM_PROMPT and `localToolSpecs()` are imported, never
+ * duplicated). The wire format is OpenAI-shaped:
  *   - tool calls arrive as `message.tool_calls[].function.arguments` (a JSON *string*, parsed here);
  *   - a tool result is replayed as `{role:'tool', tool_call_id, content}` (OpenAI requires the id);
  *   - streaming is SSE (`data: {…}\n\n` … `data: [DONE]`) with incremental `tool_calls` deltas to
@@ -42,13 +42,13 @@ import {
   FINAL_ANSWER_NUDGE,
   MAX_TOOL_HOPS,
   MAX_TOOL_HOPS_DELIBERATE,
-  OLLAMA_NUM_PREDICT as NUM_PREDICT,
-  OLLAMA_NUM_PREDICT_DELIBERATE as NUM_PREDICT_DELIBERATE,
-  OLLAMA_TEMPERATURE as TEMPERATURE,
+  GEN_NUM_PREDICT as NUM_PREDICT,
+  GEN_NUM_PREDICT_DELIBERATE as NUM_PREDICT_DELIBERATE,
+  GEN_TEMPERATURE as TEMPERATURE,
   assessDepth,
   todayLine,
   normalizeArgs,
-} from './LocalBrain.js';
+} from './persona.js';
 
 /** LM Studio server base URL (local-only). Override with KERNEL_LMSTUDIO_URL for a non-default port. */
 export const LMSTUDIO_BASE_URL =
@@ -57,9 +57,11 @@ export const LMSTUDIO_BASE_URL =
 /** The OpenAI-compatible chat endpoint LM Studio serves. */
 export const LMSTUDIO_CHAT_URL = `${LMSTUDIO_BASE_URL}/v1/chat/completions`;
 
-/** OpenAI-compatible model list (loaded + available). The native `/api/v0/models` (tried first) also
- *  reports per-model `state`, so we can prefer the one that is actually LOADED. */
+/** OpenAI-compatible model list (loaded + available), used as a last-resort fallback. */
 export const LMSTUDIO_MODELS_URL = `${LMSTUDIO_BASE_URL}/v1/models`;
+/** LM Studio NATIVE model list. v1 (0.4.0+) reports `loaded_instances` (the resident model); v0 reports
+ *  per-model `state:'loaded'`. We prefer v1, fall back to v0, then to the OpenAI list. */
+export const LMSTUDIO_V1_MODELS_URL = `${LMSTUDIO_BASE_URL}/api/v1/models`;
 export const LMSTUDIO_NATIVE_MODELS_URL = `${LMSTUDIO_BASE_URL}/api/v0/models`;
 
 /** Pin a specific model (its LM Studio id) — otherwise the active/loaded model is auto-detected. */
@@ -89,20 +91,40 @@ async function fetchWithTimeout(
 /** A model entry as LM Studio's `/api/v0/models` (native) or `/v1/models` (OpenAI) reports it. */
 interface LMStudioModelEntry {
   id?: string;
-  state?: string; // native only: 'loaded' | 'not-loaded'
+  state?: string; // native v0 only: 'loaded' | 'not-loaded'
+}
+
+/** A model entry as LM Studio's native `/api/v1/models` reports it (only the fields we read). */
+interface LMStudioV1Entry {
+  key?: string;
+  loaded_instances?: { id?: string }[];
 }
 
 /**
- * Resolve which model to drive. A pin (`KERNEL_LMSTUDIO_MODEL`) always wins. Otherwise prefer the
- * native `/api/v0/models` (it knows which model is `state:'loaded'` — the one the owner actually has
- * resident) and fall back to the first OpenAI `/v1/models` entry. Returns null when LM Studio is
- * unreachable or has no model — the caller turns that into a typed escalation.
+ * Resolve which model to drive. A pin (`KERNEL_LMSTUDIO_MODEL`) always wins. Otherwise prefer the native
+ * v1 `/api/v1/models` (it reports `loaded_instances` — the model the owner actually has resident), then
+ * fall back to v0 `/api/v0/models` (`state:'loaded'`), then to the first OpenAI `/v1/models` entry.
+ * Returns null when LM Studio is unreachable or has no model — the caller turns that into a typed
+ * escalation.
  */
 export async function resolveLmStudioModel(
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
   if (LMSTUDIO_MODEL) return LMSTUDIO_MODEL;
-  // Native API: pick the LOADED model (or the first listed if none reports loaded).
+  // Native v1: pick the model that has a loaded instance (or the first listed if none is loaded).
+  try {
+    const res = await fetchWithTimeout(fetchImpl, LMSTUDIO_V1_MODELS_URL, { method: 'GET' }, 3000);
+    if (res.ok) {
+      const body = (await res.json()) as { models?: LMStudioV1Entry[] };
+      const arr = body.models ?? [];
+      const loaded = arr.find((m) => (m.loaded_instances?.length ?? 0) > 0 && m.key);
+      if (loaded?.key) return loaded.key;
+      if (arr[0]?.key) return arr[0].key;
+    }
+  } catch {
+    /* fall through to v0 */
+  }
+  // Native v0: pick the LOADED model (or the first listed if none reports loaded).
   try {
     const res = await fetchWithTimeout(fetchImpl, LMSTUDIO_NATIVE_MODELS_URL, { method: 'GET' }, 3000);
     if (res.ok) {

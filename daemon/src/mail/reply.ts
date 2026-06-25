@@ -16,7 +16,7 @@
  * The plan's grep guard over reply.ts (matching send/dispatch invocations) must find nothing.
  */
 import { retrieveAndRerank } from '../memory/retrieve.js';
-import { OLLAMA_CHAT_URL, OLLAMA_MODEL } from '../brain/LocalBrain.js';
+import { LMSTUDIO_CHAT_URL, resolveLmStudioModel } from '../brain/LMStudioBrain.js';
 import { ClaudeBrain } from '../brain/ClaudeBrain.js';
 import { loadVoiceProfile, buildRewritePrompt } from './voice-profile.js';
 import { config } from '../config.js';
@@ -66,12 +66,12 @@ export interface PreviewPayload {
 
 /**
  * The compose provider seam. The brain rewrites are injected so the flow is unit-testable with no
- * network; the defaults wire the SHIPPED 7B helper (Ollama, absent-tolerant) + cloud ClaudeBrain.
+ * network; the defaults wire the SHIPPED local rewrite (LM Studio, absent-tolerant) + cloud ClaudeBrain.
  */
 export interface ComposeDeps {
   /** Memory dir for the voice profile + few-shot corpus (defaults to config.memoryDir). */
   memoryDir?: string;
-  /** Casual route: rewrite via the always-on 7B helper. Defaults to the Ollama helper rewrite. */
+  /** Casual route: rewrite via the local engine. Defaults to the LM Studio helper rewrite. */
   helperRewrite?: (prompt: string) => Promise<string>;
   /** High-stakes route: rewrite via the cloud ClaudeBrain. Defaults to ClaudeBrain.reason. */
   cloudRewrite?: (prompt: string) => Promise<string>;
@@ -107,14 +107,16 @@ export function routeStakes(intent: string, opts?: { highStakes?: boolean }): St
   return HIGH_STAKES.some((kw) => lower.includes(kw)) ? 'cloud' : 'helper';
 }
 
-/** Default 7B helper rewrite: hit Ollama once, absent-tolerant (mirrors brain/helper.ts). */
+/** Default local rewrite: hit the LM Studio server once, absent-tolerant (mirrors brain/helper.ts). */
 async function defaultHelperRewrite(prompt: string): Promise<string> {
   try {
-    const res = await fetch(OLLAMA_CHAT_URL, {
+    const model = await resolveLmStudioModel(fetch);
+    if (!model) return ''; // LM Studio unreachable / no model → empty rewrite (minimal-draft fallback).
+    const res = await fetch(LMSTUDIO_CHAT_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model,
         messages: [
           {
             role: 'system',
@@ -125,14 +127,15 @@ async function defaultHelperRewrite(prompt: string): Promise<string> {
           { role: 'user', content: prompt },
         ],
         stream: false,
-        options: { temperature: 0.3, num_ctx: 4096 },
+        temperature: 0.3,
+        max_tokens: 1024,
       }),
     });
     if (!res.ok) return '';
-    const body = (await res.json().catch(() => null)) as { message?: { content?: string } } | null;
-    return body?.message?.content?.trim() ?? '';
+    const body = (await res.json().catch(() => null)) as { choices?: { message?: { content?: string } }[] } | null;
+    return body?.choices?.[0]?.message?.content?.trim() ?? '';
   } catch {
-    return ''; // Ollama unreachable → empty rewrite; compose falls back to a minimal draft.
+    return ''; // LM Studio unreachable → empty rewrite; compose falls back to a minimal draft.
   }
 }
 

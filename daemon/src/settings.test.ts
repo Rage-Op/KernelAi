@@ -1,10 +1,11 @@
 /**
- * settings.test.ts — the brain=cloud|local Settings path + persistence (CLOUD-01).
+ * settings.test.ts — the brain=cloud|lmstudio Settings path + persistence (CLOUD-01).
  *
- * Covers: applySettings('local') swaps the active brain to a LocalBrain via the EXISTING
- * loop.setBrain seam; applySettings('cloud') swaps it to a ClaudeBrain; the always-on 7B helper
- * is a standalone module unaffected by the toggle (BRAIN-03 / BRAIN-05); and the selection
- * persists to disk + is re-applied by restorePersistedBrain() on startup.
+ * Covers: applySettings('lmstudio') swaps the active brain to an LMStudioBrain via the EXISTING
+ * loop.setBrain seam; applySettings('cloud') swaps it to a ClaudeBrain; a previously-persisted Ollama
+ * `local` choice is MIGRATED to lmstudio on load; the always-on helper is a standalone module
+ * unaffected by the toggle (BRAIN-03 / BRAIN-05); and the selection persists to disk + is re-applied
+ * by restorePersistedBrain() on startup.
  *
  * The persistence file is redirected to a per-test tmp path via __setBrainPrefPathForTest so this
  * NEVER writes the real ~/Library/Application Support/Kernel/brain.json (mirrors spend-ledger).
@@ -24,7 +25,6 @@ import {
 import { getActiveBrain, setBrain } from './loop.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { ClaudeBrain } from './brain/ClaudeBrain.js';
-import { LocalBrain } from './brain/LocalBrain.js';
 import { LMStudioBrain } from './brain/LMStudioBrain.js';
 import * as helper from './brain/helper.js';
 
@@ -48,19 +48,14 @@ beforeEach(() => {
   setBrain(new StubBrain());
 });
 
-test('applySettings("local") swaps the active brain to a LocalBrain', () => {
-  applySettings('local');
-  assert.ok(getActiveBrain() instanceof LocalBrain, 'brain=local → LocalBrain is active');
+test('applySettings("lmstudio") swaps the active brain to an LMStudioBrain', () => {
+  applySettings('lmstudio');
+  assert.ok(getActiveBrain() instanceof LMStudioBrain, 'brain=lmstudio → LMStudioBrain is active');
 });
 
 test('applySettings("cloud") swaps the active brain to a ClaudeBrain', () => {
   applySettings('cloud');
   assert.ok(getActiveBrain() instanceof ClaudeBrain, 'brain=cloud → ClaudeBrain is active');
-});
-
-test('applySettings("lmstudio") swaps the active brain to an LMStudioBrain', () => {
-  applySettings('lmstudio');
-  assert.ok(getActiveBrain() instanceof LMStudioBrain, 'brain=lmstudio → LMStudioBrain is active');
 });
 
 test('lmstudio selection persists + restores on startup', () => {
@@ -71,24 +66,24 @@ test('lmstudio selection persists + restores on startup', () => {
   assert.ok(getActiveBrain() instanceof LMStudioBrain, 'startup restore → LMStudioBrain active');
 });
 
-test('the 7B helper is a standalone module, unaffected by the brain toggle', () => {
+test('the helper is a standalone module, unaffected by the brain toggle', () => {
   // The helper exposes triage/classify/narrate as standalone functions — it is NOT a
   // BrainProvider and is never passed to setBrain. Toggling the brain does not touch it.
-  applySettings('local');
+  applySettings('lmstudio');
   assert.equal(typeof helper.triage, 'function', 'helper.triage exists regardless of toggle');
   applySettings('cloud');
   assert.equal(typeof helper.triage, 'function', 'helper.triage still exists after cloud toggle');
 });
 
 test('applySettings persists the selection to disk by default', () => {
-  applySettings('local');
-  assert.equal(loadPersistedBrain(), 'local', 'local is persisted');
+  applySettings('lmstudio');
+  assert.equal(loadPersistedBrain(), 'lmstudio', 'lmstudio is persisted');
   applySettings('cloud');
   assert.equal(loadPersistedBrain(), 'cloud', 'cloud overwrites the persisted choice');
 });
 
 test('applySettings(brain, false) does NOT persist (startup-restore path)', () => {
-  applySettings('local', false);
+  applySettings('lmstudio', false);
   assert.equal(loadPersistedBrain(), null, 'no file written when persist=false');
 });
 
@@ -100,11 +95,14 @@ test('loadPersistedBrain returns null when absent or corrupt', () => {
   assert.equal(loadPersistedBrain(), null, 'invalid brain value → null');
 });
 
-test('restorePersistedBrain re-applies a saved local brain on startup', () => {
-  applySettings('local'); // owner chose local in a prior session (persisted)
-  setBrain(new StubBrain()); // simulate a fresh daemon process default
+test('a persisted legacy "local" (Ollama) choice MIGRATES to lmstudio', () => {
+  // The Ollama `local` engine was removed; an owner who last chose it should land on the local engine
+  // (LM Studio), not be reset to null/default.
+  fs.writeFileSync(prefPath, JSON.stringify({ brain: 'local' }), 'utf8');
+  assert.equal(loadPersistedBrain(), 'lmstudio', 'legacy local → lmstudio');
+  setBrain(new StubBrain());
   restorePersistedBrain();
-  assert.ok(getActiveBrain() instanceof LocalBrain, 'startup restore → LocalBrain active');
+  assert.ok(getActiveBrain() instanceof LMStudioBrain, 'startup restore of legacy local → LMStudioBrain');
 });
 
 test('restorePersistedBrain re-applies a saved cloud brain on startup', () => {

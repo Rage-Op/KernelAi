@@ -46,12 +46,15 @@ export const fsArgsSchema = z
 
 type FsArgs = z.infer<typeof fsArgsSchema>;
 
-/** The model-facing description (curated for a small model — short, with the safety rules stated). */
+/** The model-facing description (curated for a small model — short, with the safety rules stated).
+ *  Names the workspace path so the model can target it instead of guessing (e.g. it used to list `/`
+ *  when asked to "list your workspace"). */
 export const FS_TOOL_DESCRIPTION =
   'Read and write files on this Mac. ops: read (a file), list (a directory), stat (file info), write ' +
   '(create/overwrite a file), edit (replace text in a file), mkdir, move, delete. You can READ any ' +
-  "non-secret path; writing/deleting is limited to KERNEL's workspace folder. Deleting needs the " +
-  "owner's approval. Use this to inspect or produce real files for the owner.";
+  `non-secret path; writing/deleting is limited to your workspace folder (${config.workspaceDir}). ` +
+  'For list/stat you may omit `path` to target your workspace. Deleting needs the owner’s approval. ' +
+  'Use this to inspect or produce real files for the owner.';
 
 const esc = (reason: string, recommendation?: string): ToolResult => ({
   ok: false,
@@ -93,7 +96,12 @@ export const fsTool: Tool = {
   schema: fsArgsSchema,
   async execute(args): Promise<ToolResult> {
     const a = args as FsArgs;
-    const resolved = resolveAndFence(a.path);
+    // For the read-only inspection ops, an omitted path means "the workspace" — so "list/stat my
+    // workspace" works even when the model doesn't know the absolute path (it previously guessed `/`).
+    // Mutating ops still require an explicit path (resolveAndFence escalates on a missing one).
+    const pathForOp =
+      !a.path?.trim() && (a.op === 'list' || a.op === 'stat') ? config.workspaceDir : a.path;
+    const resolved = resolveAndFence(pathForOp);
     if ('ok' in resolved) return resolved; // escalation (missing path / secret)
     const abs = resolved.abs;
 

@@ -6,8 +6,9 @@ KERNEL now runs as **two pieces**:
 2. **The daemon** — hosts the web Face and orchestrates everything (gate, tools, MCP, memory, filesystem,
    shell, `/override`, meta-commands). You open it in any browser.
 
-The SwiftUI Mac app has been **removed** — the web Face is now the sole UI. (The daemon still exposes its
-Unix-socket transport internally; it's just unused now. It can be stripped later for a leaner daemon.)
+The SwiftUI Mac app has been **removed**, and the daemon's old Unix-socket (UDS) transport has now been
+**stripped** too — the web Face (HTTP + SSE on `127.0.0.1`) is the daemon's sole transport. (The frame
+router, gate, loop, tools, MCP, and memory are unchanged; only the socket plumbing is gone.)
 
 ---
 
@@ -50,6 +51,11 @@ Bookmark that URL (the token is remembered in the page session). To use a differ
   also opens on the Mac (so you can complete logins / 2FA there). The stream runs only while this pane is open.
 - **Settings** — switch engine, toggle the Red breaker, set the daily spend ceiling, activate `/override`,
   and see the full gate-chokepointed capability list.
+- **LM Studio model control** (Settings) — list the models LM Studio has downloaded, see which one is
+  loaded (with its context window + capabilities), and **load / unload** a model — optionally at a chosen
+  context length — straight from the browser, via LM Studio's native `/api/v1` REST API. This is an
+  owner-only, localhost control surface (it can only act on models LM Studio already lists), parallel to
+  the **Background services** kill panel.
 
 ## Security
 

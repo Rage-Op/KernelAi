@@ -65,6 +65,25 @@ test('ClaudeBrain: a text reply maps to Decision.reply; model is claude-opus-4-8
   __setClientForTest(null);
 });
 
+test('ClaudeBrain: an SDK/auth error returns a typed escalation, never throws (absent-tolerant)', async () => {
+  // A missing key / network failure must NOT propagate out of reason() — that would crash the daemon.
+  const throwing: ClaudeClient = {
+    messages: {
+      async create() {
+        throw new Error('Could not resolve authentication method. Expected one of apiKey…');
+      },
+    },
+  };
+  __setClientForTest(throwing);
+  let decision;
+  await assert.doesNotReject(async () => {
+    decision = await new ClaudeBrain().reason('hi', 'ctx');
+  }, 'reason() must not throw when the SDK errors');
+  assert.ok(decision!.reply && /API key|unavailable/i.test(decision!.reply), 'a helpful no-key reply is surfaced');
+  assert.equal(decision!.action, undefined, 'an error turn carries no action');
+  __setClientForTest(null);
+});
+
 test('ClaudeBrain: stop_reason tool_use → exactly ONE Decision.action, no tool executed (BRAIN-06)', async () => {
   const { client } = toolUseClient();
   __setClientForTest(client);

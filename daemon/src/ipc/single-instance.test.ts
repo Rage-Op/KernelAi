@@ -1,9 +1,11 @@
 /**
- * single-instance.test.ts — the boot-time guard that stops a SECOND daemon from clobbering the
- * socket of a running one (the two-daemon bug: a manually-run daemon stole the launchd daemon's
- * socket and, lacking the owner's ~/.kernel.env, broke web/internet tools).
+ * single-instance.test.ts — the boot-time guard that stops a SECOND daemon from starting alongside a
+ * running one (the two-daemon bug: a manually-run daemon stole the launchd daemon's resources and,
+ * lacking the owner's ~/.kernel.env, broke web/internet tools).
  *
- * `probeDaemonAlive` is the primitive index.ts uses: connect → alive; ENOENT/ECONNREFUSED → not.
+ * The authoritative guard is the OS-level PID lock (single-instance-lock.ts) — it catches a live daemon
+ * regardless of transport state. (The old `probeDaemonAlive` socket probe was removed with the UDS
+ * transport; the web server's port bind is now the only secondary check, exercised at the system level.)
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +13,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { startIpc, probeDaemonAlive } from './server.js';
 import {
   acquireSingleInstanceLock,
   lockPath,
@@ -27,29 +28,7 @@ function tmpLock(): string {
   return path.join(dir, 'daemon.pid');
 }
 
-test('probeDaemonAlive: false when no socket file exists', async () => {
-  const p = path.join(
-    os.tmpdir(),
-    `kernel-probe-absent-${process.pid}-${Math.random().toString(36).slice(2)}.sock`,
-  );
-  assert.equal(await probeDaemonAlive(p), false, 'ENOENT → not alive');
-});
-
-test('probeDaemonAlive: true while a daemon listens, false after it closes', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-probe-'));
-  const p = path.join(dir, 'kernel.sock');
-  const ipc = await startIpc(() => {}, p);
-  try {
-    assert.equal(await probeDaemonAlive(p), true, 'a live listener probes alive');
-  } finally {
-    await ipc.close();
-  }
-  // After close the socket file is unlinked → a probe must report dead (safe to bind a new one).
-  assert.equal(await probeDaemonAlive(p), false, 'no listener after close → not alive');
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
-// --- PID lock: catches a live-but-UNREACHABLE daemon the connect-probe misses (the real bug) ---
+// --- PID lock: catches a live-but-UNREACHABLE daemon the connect-probe missed (the real bug) ---
 
 test('pidAlive: true for this process, false for a dead/invalid pid', () => {
   assert.equal(pidAlive(process.pid), true, 'our own pid is alive');

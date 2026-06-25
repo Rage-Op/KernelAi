@@ -28,6 +28,7 @@ transport.onStatus((connected) => {
     transport.send({ type: 'history.request', id: 'hist', limit: 200 });
   }
   transport.send({ type: 'service.list', id: 'svc' }); // refresh the services panel each (re)connect
+  transport.send({ type: 'lmstudio.list', id: 'lms' }); // and the LM Studio models panel
   if (everConnected) {
     // RECONNECT: the new server-side conn lost our per-conn state. Re-assert the screencast intent if the
     // Browser pane is open, and close out any turn orphaned by the drop (its deltas went to the dead conn).
@@ -99,7 +100,10 @@ function showView(name: ViewName): void {
     transport.send({ type: 'browser.view', streaming: wantStream });
   }
   if (name === 'chat') byId<HTMLTextAreaElement>('composer-input').focus();
-  if (name === 'settings') transport.send({ type: 'service.list', id: 'svc' }); // fresh status when opened
+  if (name === 'settings') {
+    transport.send({ type: 'service.list', id: 'svc' }); // fresh status when opened
+    transport.send({ type: 'lmstudio.list', id: 'lms' }); // fresh LM Studio model list when opened
+  }
 }
 
 document.querySelectorAll<HTMLElement>('.rail-tab').forEach((tab) => {

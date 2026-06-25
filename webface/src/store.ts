@@ -3,7 +3,7 @@
  * re-render incrementally. Turns are keyed by id so streaming say/reasoning/tool/stats/progress frames
  * land on the right assistant turn (the same id the composer minted for the utterance).
  */
-import type { Brain, InboundFrame, ServiceInfo } from './frames.js';
+import type { Brain, InboundFrame, ServiceInfo, LmStudioModelInfo } from './frames.js';
 
 export interface ToolAct { tool: string; op: string; status: 'start' | 'ok' | 'error'; detail?: string; }
 export interface TurnStats {
@@ -32,6 +32,7 @@ export interface State {
   turns: Turn[];
   browser: { active: boolean; url?: string; frame?: { dataB64: string; width: number; height: number; url: string } };
   services: ServiceInfo[];
+  lmstudio: { serverUp: boolean; active?: string; note?: string; models: LmStudioModelInfo[] };
 }
 
 type Listener = (s: State) => void;
@@ -39,13 +40,14 @@ type Listener = (s: State) => void;
 export class Store {
   state: State = {
     connected: false,
-    model: { status: 'loading', brain: 'local' },
+    model: { status: 'loading', brain: 'lmstudio' },
     settings: { breakerEnabled: false, dailySpendCeiling: 0, defaultTtlMs: 300000 },
     override: { active: false },
-    brain: 'local',
+    brain: 'lmstudio',
     turns: [],
     browser: { active: false },
     services: [],
+    lmstudio: { serverUp: false, models: [] },
   };
   private listeners = new Set<Listener>();
 
@@ -153,6 +155,16 @@ export class Store {
       case 'service.data': {
         const s = f as any;
         if (Array.isArray(s.services)) this.state.services = s.services;
+        break;
+      }
+      case 'lmstudio.data': {
+        const l = f as any;
+        this.state.lmstudio = {
+          serverUp: !!l.serverUp,
+          active: l.active,
+          note: l.note,
+          models: Array.isArray(l.models) ? l.models : [],
+        };
         break;
       }
       case 'error':
