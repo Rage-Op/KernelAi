@@ -20,8 +20,9 @@ import { logger } from '../memory/log.js';
 /** The model's lifecycle state for the boot gate. */
 export type ModelStatus = 'loading' | 'ready' | 'error';
 
-/** Which engine a readiness snapshot concerns: the LOCAL `lmstudio` engine, or `cloud` (Claude). */
-export type BrainKind = 'cloud' | 'lmstudio';
+/** Which engine a readiness snapshot concerns: the LOCAL `lmstudio` engine, `claude-code` (Claude via
+ *  the owner's CLI subscription), or `cloud` (Claude via the paid API). */
+export type BrainKind = 'cloud' | 'lmstudio' | 'claude-code';
 
 /** A snapshot of model readiness, broadcast to the Face as a `model.state` frame. */
 export interface ModelState {
@@ -117,7 +118,14 @@ export async function warmupActiveBrain(
   const gen = ++generation; // claim this warm-up's generation; later emits no-op if superseded
 
   if (brain === 'cloud') {
-    emitFor(gen, { status: 'ready', brain: 'cloud', detail: 'Cloud brain (Claude) ready.' });
+    emitFor(gen, { status: 'ready', brain: 'cloud', detail: 'Cloud brain (Claude API) ready.' });
+    return current;
+  }
+
+  if (brain === 'claude-code') {
+    // The Claude Code CLI runs on the owner's subscription — there's no local model to load. The brain
+    // itself is absent-tolerant if the CLI is missing / not logged in, so report ready immediately.
+    emitFor(gen, { status: 'ready', brain: 'claude-code', detail: 'Claude (subscription) ready.' });
     return current;
   }
 

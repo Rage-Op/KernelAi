@@ -32,8 +32,8 @@ function renderModelWindow(): string[] {
   const brain = currentBrainSelection();
   const snap = snapshot();
   const lines: string[] = [];
-  // The local engine (`lmstudio`) runs on-device — only `cloud` is remote.
-  if (brain !== 'cloud') {
+  // Only `lmstudio` runs on-device; `cloud` (API) and `claude-code` (subscription) are remote Claude.
+  if (brain === 'lmstudio') {
     // lastModel already reflects LM Studio's actual loaded model (it reports its tag per turn).
     const model = snap.lastModel ?? 'local model';
     // GEN_NUM_CTX is a generic local default; LM Studio's real window depends on how the model was
@@ -49,7 +49,8 @@ function renderModelWindow(): string[] {
     }
   } else {
     const model = snap.lastModel ?? CLAUDE_MODEL;
-    lines.push(`Model window — cloud · ${model} · ${commas(CLOUD_CONTEXT_WINDOW)} tok`);
+    const engine = brain === 'claude-code' ? 'claude (sub)' : 'cloud';
+    lines.push(`Model window — ${engine} · ${model} · ${commas(CLOUD_CONTEXT_WINDOW)} tok`);
     if (typeof snap.lastPromptTokens === 'number') {
       lines.push(`  last turn used ${commas(snap.lastPromptTokens)} prompt tok`);
     }

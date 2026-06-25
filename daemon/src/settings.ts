@@ -21,12 +21,14 @@ import path from 'node:path';
 import { setBrain } from './loop.js';
 import { ClaudeBrain } from './brain/ClaudeBrain.js';
 import { LMStudioBrain } from './brain/LMStudioBrain.js';
+import { ClaudeCodeBrain } from './brain/ClaudeCodeBrain.js';
 import { config } from './config.js';
 import { logger } from './memory/log.js';
 
 /** The brain selection surfaced by the Settings toggle: the LOCAL engine (`lmstudio` — LM Studio's
- *  OpenAI-compatible server, MLX or GGUF) or `cloud` (Claude). */
-export type BrainSelection = 'cloud' | 'lmstudio';
+ *  OpenAI-compatible server, MLX or GGUF), `claude-code` (Claude via the owner's CLI SUBSCRIPTION — no
+ *  API key), or `cloud` (Claude via the paid Anthropic API). */
+export type BrainSelection = 'cloud' | 'lmstudio' | 'claude-code';
 
 /** The current Settings selection. ClaudeBrain (cloud) is the default (BRAIN-02). */
 let currentBrain: BrainSelection = 'cloud';
@@ -73,7 +75,9 @@ function persistBrain(brain: BrainSelection): void {
 export function loadPersistedBrain(): BrainSelection | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(brainPrefPath(), 'utf8')) as { brain?: unknown };
-    if (parsed.brain === 'cloud' || parsed.brain === 'lmstudio') return parsed.brain;
+    if (parsed.brain === 'cloud' || parsed.brain === 'lmstudio' || parsed.brain === 'claude-code') {
+      return parsed.brain;
+    }
     // Migrate a previously-persisted Ollama `local` choice to LM Studio (the local engine now).
     if (parsed.brain === 'local') return 'lmstudio';
   } catch {
@@ -90,7 +94,13 @@ export function loadPersistedBrain(): BrainSelection | null {
  */
 export function applySettings(brain: BrainSelection, persist = true): void {
   currentBrain = brain;
-  setBrain(brain === 'lmstudio' ? new LMStudioBrain() : new ClaudeBrain());
+  setBrain(
+    brain === 'lmstudio'
+      ? new LMStudioBrain()
+      : brain === 'claude-code'
+        ? new ClaudeCodeBrain()
+        : new ClaudeBrain(),
+  );
   if (persist) persistBrain(brain);
 }
 

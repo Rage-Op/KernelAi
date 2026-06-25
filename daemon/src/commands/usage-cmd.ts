@@ -38,14 +38,16 @@ export function runUsageReport(arg = ''): string {
   const brainLabel = s.lastBrain
     ? s.lastBrain === 'cloud'
       ? 'cloud'
-      : s.lastBrain === 'lmstudio'
-        ? 'lmstudio (free)'
-        : 'local (free)'
+      : s.lastBrain === 'claude-code'
+        ? 'claude (sub, free)'
+        : 'lmstudio (free)'
     : '—';
   const costLine =
     s.lastBrain === 'cloud'
       ? `${usd(s.costUsd)} billed`
-      : `${usd(0)} (local, free)   cloud-equivalent ≈ ${usd(s.cloudEquivUsd)}`;
+      : s.lastBrain === 'claude-code'
+        ? `${usd(0)} (subscription)   cloud-equivalent ≈ ${usd(s.cloudEquivUsd)}`
+        : `${usd(0)} (local, free)   cloud-equivalent ≈ ${usd(s.cloudEquivUsd)}`;
 
   const lines = [
     ...head,
@@ -61,9 +63,9 @@ export function runUsageReport(arg = ''): string {
   }
   lines.push(`  cost       ${costLine}`);
 
-  // A coarse model-window fill from the last turn (local context is the binding budget). Both local
-  // engines (Ollama + LM Studio) get it; cloud's 1M window makes a fill bar meaningless.
-  if (s.lastBrain !== undefined && s.lastBrain !== 'cloud' && typeof s.lastPromptTokens === 'number') {
+  // A coarse model-window fill from the last turn (local context is the binding budget). Only the LOCAL
+  // engine (LM Studio) gets it; the large Claude window (cloud / subscription) makes a fill bar meaningless.
+  if (s.lastBrain === 'lmstudio' && typeof s.lastPromptTokens === 'number') {
     lines.push(`  last ctx   ${commas(s.lastPromptTokens)} prompt tok  ${bar(s.lastPromptTokens, LOCAL_CTX_WINDOW, 14)} of ${Math.round(LOCAL_CTX_WINDOW / 1024)}K window`);
   }
 

@@ -1,11 +1,11 @@
 /**
- * ClaudeCodeBrain.test.ts — RED until Task 2 creates ClaudeCodeBrain.ts.
+ * ClaudeCodeBrain.test.ts — the CLAUDE (SUBSCRIPTION) brain.
  *
- * Covers BRAIN-04: ClaudeCodeBrain spawns `claude -p ... --output-format json` and
- * parses `.result` → Decision.reply; it is ABSENT-TOLERANT — a non-zero exit / spawn
- * ENOENT / garbled stdout returns a typed escalation Decision, never throwing across
- * the loop boundary. Green/Yellow-only is enforced by the CLI flags (asserted via the
- * recorded argv).
+ * Covers: ClaudeCodeBrain spawns `claude -p … --output-format json` and parses `.result` →
+ * Decision.reply; it runs in SUBSCRIPTION mode (NO `--bare`, which would force API-key auth) and
+ * injects KERNEL's identity + memory via `--append-system-prompt`; it is read-only fenced; and it is
+ * ABSENT-TOLERANT — a non-zero exit / spawn ENOENT / garbled stdout returns a typed escalation
+ * Decision, never throwing across the loop boundary.
  *
  * The CLI runner is mocked via the `__setRunnerForTest` seam — node:child_process is
  * never actually spawned in the unit test.
@@ -26,15 +26,22 @@ test('ClaudeCodeBrain: clean JSON stdout parses to Decision.reply (Green/Yellow-
     };
   });
 
-  const decision = await new ClaudeCodeBrain().reason('refactor the parser', 'ctx');
+  const decision = await new ClaudeCodeBrain().reason('refactor the parser', 'MEMCTX_MARKER');
   assert.equal(decision.reply, 'Refactored the parser.', 'stdout .result maps to Decision.reply');
   assert.ok(seenArgs.includes('-p'), 'invokes headless print mode');
   assert.ok(seenArgs.includes('--output-format') && seenArgs.includes('json'), 'requests JSON output');
-  // Green/Yellow-only fence: a permission restriction flag must be present (BRAIN-04 / T-03-05).
-  assert.ok(
-    seenArgs.includes('--permission-mode') || seenArgs.includes('--allowedTools'),
-    'a read-only permission fence flag is present (Green/Yellow-only this phase)',
-  );
+  // PURE REASONER fence: dontAsk + NO allowlisted tools (denies all tool use; no secret-fence bypass).
+  const pmIdx = seenArgs.indexOf('--permission-mode');
+  assert.ok(pmIdx >= 0 && seenArgs[pmIdx + 1] === 'dontAsk', '--permission-mode dontAsk is set');
+  assert.ok(!seenArgs.includes('--allowedTools'), 'no tools are allowlisted (pure text reasoner)');
+  // SUBSCRIPTION mode: NO --bare (which would force ANTHROPIC_API_KEY auth and defeat the subscription).
+  assert.ok(!seenArgs.includes('--bare'), 'subscription mode runs WITHOUT --bare');
+  // KERNEL identity + memory context are injected via an appended system prompt.
+  const sysIdx = seenArgs.indexOf('--append-system-prompt');
+  assert.ok(sysIdx >= 0, 'injects an appended system prompt');
+  const sysPrompt = seenArgs[sysIdx + 1] ?? '';
+  assert.ok(/KERNEL/.test(sysPrompt), 'the system prompt carries KERNEL identity');
+  assert.ok(sysPrompt.includes('MEMCTX_MARKER'), 'the system prompt carries the assembled memory context');
 
   __setRunnerForTest(null);
 });

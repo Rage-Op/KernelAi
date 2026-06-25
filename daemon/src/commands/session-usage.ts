@@ -13,7 +13,7 @@ import { cloudEquivUsd } from '../brain/pricing.js';
 
 /** A turn's measured usage — the subset of the `stats` frame the accumulator consumes. */
 export interface TurnUsage {
-  brain: 'cloud' | 'lmstudio';
+  brain: 'cloud' | 'lmstudio' | 'claude-code';
   model?: string;
   promptTokens?: number;
   outputTokens?: number;
@@ -46,7 +46,7 @@ export interface UsageSnapshot {
   lastPromptTokens: number | null;
   /** Most recent model + brain seen (for labelling the report). */
   lastModel?: string;
-  lastBrain?: 'cloud' | 'lmstudio';
+  lastBrain?: 'cloud' | 'lmstudio' | 'claude-code';
 }
 
 interface State {
@@ -60,7 +60,7 @@ interface State {
   cloudEquivUsd: number;
   lastPromptTokens: number | null;
   lastModel?: string;
-  lastBrain?: 'cloud' | 'lmstudio';
+  lastBrain?: 'cloud' | 'lmstudio' | 'claude-code';
 }
 
 function freshState(): State {

@@ -181,6 +181,7 @@ test('protocol: the designed-for P2/P3 shapes are part of the frozen contract', 
 test('protocol: a settings frame (brain toggle) round-trips through FrameSchema', () => {
   assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'cloud' }).success, true);
   assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'lmstudio' }).success, true);
+  assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'claude-code' }).success, true);
   // the removed Ollama `local` engine is no longer a valid brain
   assert.equal(FrameSchema.safeParse({ type: 'settings', brain: 'local' }).success, false);
   // an out-of-enum brain is rejected

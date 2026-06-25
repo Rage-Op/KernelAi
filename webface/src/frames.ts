@@ -3,7 +3,7 @@
  * Mirrors daemon/src/ipc/protocol.ts (kept deliberately small — only what the UI uses). The daemon
  * remains the single source of truth; these are structural types for the browser side.
  */
-export type Brain = 'cloud' | 'lmstudio';
+export type Brain = 'cloud' | 'lmstudio' | 'claude-code';
 
 // ---- daemon → web ----
 export interface ReadyFrame { type: 'ready'; daemon: string; version: string; }
@@ -77,8 +77,8 @@ export type OutboundFrame =
 
 /** Brain → human label (matches the daemon's engine naming). */
 export function engineLabel(b: Brain): string {
-  return b === 'cloud' ? 'cloud' : 'lm studio';
+  return b === 'cloud' ? 'cloud' : b === 'claude-code' ? 'claude (sub)' : 'lm studio';
 }
 export function shortBrain(b: Brain): string {
-  return b === 'cloud' ? 'claude' : 'lm studio';
+  return b === 'lmstudio' ? 'lm studio' : 'claude';
 }

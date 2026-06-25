@@ -51,7 +51,7 @@ export const UiIntentSchema = z.object({
  */
 export const SettingsSchema = z.object({
   type: z.literal('settings'),
-  brain: z.enum(['cloud', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio', 'claude-code']),
 });
 
 // --- daemon → Face -------------------------------------------------------------
@@ -136,7 +136,7 @@ export const ErrorSchema = z.object({
  */
 export const CapabilitiesSchema = z.object({
   type: z.literal('capabilities'),
-  brain: z.enum(['cloud', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio', 'claude-code']),
   daemon: z.string(),
   version: z.string(),
   /** The memory-injection context cap in characters (config.injectCap). */
@@ -156,7 +156,7 @@ export const CapabilitiesSchema = z.object({
 export const StatsSchema = z.object({
   type: z.literal('stats'),
   id: z.string(),
-  brain: z.enum(['cloud', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio', 'claude-code']),
   model: z.string().optional(),
   promptTokens: z.number().optional(),
   outputTokens: z.number().optional(),
@@ -412,7 +412,7 @@ export const AuditDataSchema = z.object({
 export const ModelStateSchema = z.object({
   type: z.literal('model.state'),
   status: z.enum(['loading', 'ready', 'error']),
-  brain: z.enum(['cloud', 'lmstudio']),
+  brain: z.enum(['cloud', 'lmstudio', 'claude-code']),
   model: z.string().optional(),
   detail: z.string().optional(),
 });

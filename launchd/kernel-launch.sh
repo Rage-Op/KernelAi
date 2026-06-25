@@ -16,7 +16,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 
 export HOME="${HOME:-/Users/$(id -un)}"
-export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+# Include ~/.local/bin so user-installed CLIs (notably Claude Code, used by the `claude-code`
+# subscription brain) are on PATH — launchd's default PATH omits it.
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 export KERNEL_MEMORY_DIR="${KERNEL_MEMORY_DIR:-$REPO/kernel-memory}"
 
 # Owner-provided secrets (optional; absent is fine — the daemon idles without them).

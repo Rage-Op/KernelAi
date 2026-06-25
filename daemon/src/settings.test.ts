@@ -26,6 +26,7 @@ import { getActiveBrain, setBrain } from './loop.js';
 import { StubBrain } from './brain/StubBrain.js';
 import { ClaudeBrain } from './brain/ClaudeBrain.js';
 import { LMStudioBrain } from './brain/LMStudioBrain.js';
+import { ClaudeCodeBrain } from './brain/ClaudeCodeBrain.js';
 import * as helper from './brain/helper.js';
 
 let tmpDir: string;
@@ -56,6 +57,12 @@ test('applySettings("lmstudio") swaps the active brain to an LMStudioBrain', () 
 test('applySettings("cloud") swaps the active brain to a ClaudeBrain', () => {
   applySettings('cloud');
   assert.ok(getActiveBrain() instanceof ClaudeBrain, 'brain=cloud → ClaudeBrain is active');
+});
+
+test('applySettings("claude-code") swaps the active brain to a ClaudeCodeBrain (subscription)', () => {
+  applySettings('claude-code');
+  assert.ok(getActiveBrain() instanceof ClaudeCodeBrain, 'brain=claude-code → ClaudeCodeBrain is active');
+  assert.equal(loadPersistedBrain(), 'claude-code', 'claude-code persists');
 });
 
 test('lmstudio selection persists + restores on startup', () => {

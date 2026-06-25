@@ -4,8 +4,9 @@ import type { State, Store } from '../store.js';
 import type { Brain, OutboundFrame } from '../frames.js';
 
 const BRAINS: { id: Brain; name: string; desc: string }[] = [
-  { id: 'lmstudio', name: 'LM Studio', desc: 'Local MLX/GGUF via LM Studio server (:1234). Apple-Silicon optimal.' },
-  { id: 'cloud', name: 'Claude (cloud)', desc: 'Anthropic API — priced per token. Most capable.' },
+  { id: 'lmstudio', name: 'LM Studio', desc: 'Local MLX/GGUF via LM Studio server (:1234). Apple-Silicon optimal. Drives KERNEL tools.' },
+  { id: 'claude-code', name: 'Claude (subscription)', desc: 'Claude via your Claude Code CLI login — no API key. Reasoning only (no KERNEL tool actions).' },
+  { id: 'cloud', name: 'Claude (API key)', desc: 'Anthropic API — needs ANTHROPIC_API_KEY, billed per token. Most capable; drives KERNEL tools.' },
 ];
 
 export function mountSettings(store: Store, send: (f: OutboundFrame) => void): void {
